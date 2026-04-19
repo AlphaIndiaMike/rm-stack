@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SyRS Authoring Tool</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
+    <link href="styles.css" rel="stylesheet">
+</head>
+<body>
+    <!-- Top bar -->
+    <nav class="navbar navbar-dark bg-dark px-3">
+        <div class="d-flex align-items-center gap-3 w-100">
+            <span class="navbar-brand mb-0 h1">SyRS Authoring Tool</span>
+
+            <div class="d-flex align-items-center gap-2">
+                <label for="disciplineSelect" class="text-white small mb-0">Discipline:</label>
+                <select id="disciplineSelect" class="form-select form-select-sm">
+                    <option value="system" selected>System</option>
+                    <option value="item" disabled>Item (V2)</option>
+                    <option value="software" disabled>Software (V2)</option>
+                    <option value="hardware" disabled>Hardware (V3)</option>
+                </select>
+            </div>
+
+            <div class="d-flex align-items-center gap-2">
+                <label for="docClassSelect" class="text-white small mb-0">Class:</label>
+                <select id="docClassSelect" class="form-select form-select-sm">
+                    <option value="simple">Simple (≤200)</option>
+                    <option value="complex" selected>Complex (≤300)</option>
+                    <option value="adas">ADAS Platform (≤400)</option>
+                </select>
+            </div>
+
+            <div class="ms-auto d-flex gap-2">
+                <input type="file" id="loadJsonInput" accept=".json" style="display:none;">
+                <button id="loadJsonButton" class="btn btn-sm btn-outline-light">Load JSON</button>
+                <button id="saveJsonButton" class="btn btn-sm btn-outline-light">Save JSON</button>
+                <button id="resetButton" class="btn btn-sm btn-outline-danger">Reset</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Three-pane layout -->
+    <div class="three-pane-container">
+        <!-- Left pane: outline -->
+        <aside id="leftPane" class="pane pane-left">
+            <div class="pane-header">
+                <h6 class="mb-0">Document Outline</h6>
+                <span id="budgetCounter" class="badge bg-secondary">0 / 300</span>
+            </div>
+            <div id="outlineContainer" class="pane-body"></div>
+        </aside>
+
+        <!-- Center pane: document/editor -->
+        <main id="centerPane" class="pane pane-center">
+            <div class="pane-header">
+                <h5 id="chapterTitle" class="mb-0">Select a chapter</h5>
+                <span id="chapterCompleteness" class="badge bg-secondary">—</span>
+            </div>
+            <div id="editorContainer" class="pane-body"></div>
+        </main>
+
+        <!-- Right pane: live summary -->
+        <aside id="rightPane" class="pane pane-right">
+            <div class="pane-header">
+                <h6 class="mb-0">Model Summary</h6>
+            </div>
+            <div id="summaryContainer" class="pane-body"></div>
+        </aside>
+    </div>
+
+    <!-- Scripts in dependency order -->
+    <script src="grammar.js"></script>
+    <script src="outline.js"></script>
+    <script src="model_base.js"></script>
+    <script src="model_system.js"></script>
+    <script src="validator.js"></script>
+    <script src="persistence.js"></script>
+    <script src="ui_outline.js"></script>
+    <script src="ui_editor.js"></script>
+    <script src="ui_summary.js"></script>
+    <script src="main.js"></script>
+</body>
+</html>
