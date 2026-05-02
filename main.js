@@ -34,6 +34,14 @@ document.addEventListener('DOMContentLoaded', () => {
         renderAll();
     });
 
+    document.getElementById('exportTxtButton').addEventListener('click', () => {
+        Exporter.exportTxt(doc);
+    });
+
+    document.getElementById('exportPdfButton').addEventListener('click', () => {
+        Exporter.exportPdf(doc);
+    });
+
     document.getElementById('saveJsonButton').addEventListener('click', () => {
         Persistence.save(doc);
     });
@@ -60,17 +68,6 @@ document.addEventListener('DOMContentLoaded', () => {
         loadInput.value = '';
     });
 
-    document.getElementById('resetButton').addEventListener('click', () => {
-        if (!confirm('Reset all content? Unsaved changes will be lost.')) return;
-        doc = new SyrsDocument({ discipline: 'system', docClass: 'complex' });
-        outlineView.setDocument(doc);
-        editorView.setDocument(doc);
-        summaryView.setDocument(doc);
-        editorView.currentChapter = null;
-        editorView.currentElement = null;
-        renderAll();
-    });
-
     // --- Initial render ---
     renderAll();
 });
@@ -93,6 +90,14 @@ function renderAll() {
         document.getElementById('chapterCompleteness')
     );
     summaryView.render(document.getElementById('summaryContainer'));
+
+    // Top-bar Load/Save and the center pane-header are only meaningful
+    // once a chapter is open; before that, the welcome panel takes over.
+    const inEditor = !!editorView.currentChapter;
+    const actions = document.getElementById('topBarActions');
+    const header  = document.getElementById('chapterPaneHeader');
+    if (actions) actions.classList.toggle('d-none', !inEditor);
+    if (header)  header.classList.toggle('d-none', !inEditor);
 
     // Update budget counter in top bar
     const validator = new DocumentValidator(doc);

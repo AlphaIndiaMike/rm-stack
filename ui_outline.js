@@ -1,8 +1,21 @@
 /**
  * ui_outline.js
  *
- * Renders the left-pane outline. Each chapter shows its completeness
- * indicator. Chapter 7 auto-expands into one node per declared element.
+ * Renders the left-pane navigation. The pane is split into two sections:
+ *
+ *   1. OUTLINE — chapters where the user actually inputs content
+ *      (requirements, declarations, or auto-expanded element leaves).
+ *      Chapter 7 still expands one row per declared element.
+ *
+ *   2. REMINDERS — chapters that are pure governance / quality-gate
+ *      checklists (front matter, scope, allocation rules, FMEA/FTA
+ *      summaries, traceability report, etc.). These produce no authored
+ *      content; they exist only to remind the user what would otherwise
+ *      be missed.
+ *
+ * The categorization is derived from the existing outline.js data
+ * (allowsRequirements / declarations / autoExpand) so the data
+ * definitions stay the single source of truth — no new flag added.
  */
 
 class OutlineView {
@@ -23,20 +36,31 @@ class OutlineView {
         this.activeElementId = elementId || null;
     }
 
+    /** A chapter belongs in the outline (vs. reminders) iff the user
+     *  actually inputs something there. */
+    static isAuthoringChapter(chapter) {
+        return !!(chapter.allowsRequirements
+                || (chapter.declarations && chapter.declarations.length > 0)
+                || chapter.autoExpand);
+    }
+
     render(container) {
         container.innerHTML = '';
-        const outline = OUTLINES[this.doc.discipline];
+        const outline = OUTLINES[this.doc.discipline] || [];
         const validator = new DocumentValidator(this.doc);
 
-        outline.forEach(chapter => {
-            const node = this._renderChapter(chapter, validator);
-            container.appendChild(node);
+        const authoring = outline.filter(OutlineView.isAuthoringChapter);
+        const reminders = outline.filter(c => !OutlineView.isAuthoringChapter(c));
 
-            // Auto-expand Chapter 7 into one node per element
+        // --- Outline section: chapters the user authors ---
+        authoring.forEach((chapter, idx) => {
+            container.appendChild(this._renderChapter(chapter, validator, false, idx + 1));
+
+            // Chapter 7 (or any autoExpand='elements') gets one child row
+            // per declared element.
             if (chapter.autoExpand === 'elements') {
                 this.doc.elements.forEach(el => {
-                    const childNode = this._renderElementChild(chapter, el, validator);
-                    container.appendChild(childNode);
+                    container.appendChild(this._renderElementChild(chapter, el));
                 });
                 if (this.doc.elements.length === 0) {
                     const empty = document.createElement('div');
@@ -48,24 +72,53 @@ class OutlineView {
                 }
             }
         });
+
+        // --- Checklists section: governance / quality-gate items ---
+        if (reminders.length > 0) {
+            const divider = document.createElement('div');
+            divider.className = 'outline-section-divider';
+            divider.innerHTML = `
+                <span>Checklists</span>
+                <span class="outline-section-hint">no input, gates only</span>
+            `;
+            container.appendChild(divider);
+
+            reminders.forEach((chapter, idx) => {
+                container.appendChild(this._renderChapter(chapter, validator, true, idx + 1));
+            });
+        }
     }
 
-    _renderChapter(chapter, validator) {
+    _renderChapter(chapter, validator, isReminder, displayNum) {
         const div = document.createElement('div');
         div.className = 'outline-chapter';
+        if (isReminder) div.classList.add('reminder');
         if (this.activeChapterId === chapter.id && !this.activeElementId) {
             div.classList.add('active');
         }
 
-        const reqCount = this.doc.requirementsForChapter(chapter.id).length;
         const status = validator.chapterStatus(chapter);
         const pct = validator.chapterCompleteness(chapter);
 
+        // Trailing label differs by section:
+        //   - Authoring: requirement count when non-zero
+        //   - Reminders: checklist progress as done/total
+        let trailingLabel = '';
+        if (isReminder) {
+            const state = this.doc.checklistState[chapter.id] || {};
+            const total = (chapter.checklist || []).length;
+            const done  = (chapter.checklist || []).filter(c => state[c.id]).length;
+            if (total > 0) trailingLabel = `<span class="outline-count">${done}/${total}</span>`;
+        } else {
+            const reqCount = this.doc.requirementsForChapter(chapter.id).length;
+            if (reqCount > 0) trailingLabel = `<span class="outline-count">(${reqCount})</span>`;
+        }
+
         div.innerHTML = `
             <span>
-                <span class="chapter-num">${chapter.number}</span>
+                <span class="chapter-num">${displayNum}</span>
                 ${chapter.title}
-                ${reqCount > 0 ? `<span style="color:#999;font-size:11px;">(${reqCount})</span>` : ''}
+                ${trailingLabel}
             </span>
             <span class="completeness-dot ${status}" title="${pct}% complete"></span>
         `;
@@ -74,7 +127,7 @@ class OutlineView {
         return div;
     }
 
-    _renderElementChild(chapter, element, validator) {
+    _renderElementChild(chapter, element) {
         const div = document.createElement('div');
         div.className = 'outline-chapter child';
         if (this.activeChapterId === chapter.id && this.activeElementId === element.id) {
@@ -90,7 +143,7 @@ class OutlineView {
             <span>
                 <span style="color:#999;">7.x</span>
                 ${element.name || '(unnamed element)'}
-                <span style="color:#999;font-size:11px;">(${reqCount})</span>
+                <span class="outline-count">(${reqCount})</span>
             </span>
             <span class="completeness-dot ${statusClass}"></span>
         `;

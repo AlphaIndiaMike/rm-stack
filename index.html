@@ -32,11 +32,12 @@
                 </select>
             </div>
 
-            <div class="ms-auto d-flex gap-2">
+            <div id="topBarActions" class="ms-auto d-flex gap-2 d-none">
                 <input type="file" id="loadJsonInput" accept=".json" style="display:none;">
-                <button id="loadJsonButton" class="btn btn-sm btn-outline-light">Load JSON</button>
-                <button id="saveJsonButton" class="btn btn-sm btn-outline-light">Save JSON</button>
-                <button id="resetButton" class="btn btn-sm btn-outline-danger">Reset</button>
+                <button id="exportTxtButton" class="btn btn-sm btn-outline-light">Export TXT</button>
+                <button id="exportPdfButton" class="btn btn-sm btn-outline-light">Export PDF</button>
+                <button id="loadJsonButton" class="btn btn-sm btn-outline-light">Load Project</button>
+                <button id="saveJsonButton" class="btn btn-sm btn-primary">Save Project</button>
             </div>
         </div>
     </nav>
@@ -54,8 +55,8 @@
 
         <!-- Center pane: document/editor -->
         <main id="centerPane" class="pane pane-center">
-            <div class="pane-header">
-                <h5 id="chapterTitle" class="mb-0">Select a chapter</h5>
+            <div id="chapterPaneHeader" class="pane-header d-none">
+                <h6 id="chapterTitle" class="mb-0">Select a chapter</h6>
                 <span id="chapterCompleteness" class="badge bg-secondary">—</span>
             </div>
             <div id="editorContainer" class="pane-body"></div>
@@ -77,6 +78,7 @@
     <script src="model_system.js"></script>
     <script src="validator.js"></script>
     <script src="persistence.js"></script>
+    <script src="export.js"></script>
     <script src="ui_outline.js"></script>
     <script src="ui_editor.js"></script>
     <script src="ui_summary.js"></script>
