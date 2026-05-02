@@ -25,10 +25,16 @@ class EditorView {
 
     _newDraft() {
         if (!this.currentChapter) return null;
+        // The Requirement constructor assigns a fallback random ID;
+        // we replace it with a sentinel so it's obvious in the preview
+        // that the ID is provisional. The real, sequential ID is
+        // allocated at commit time via doc.nextId('requirement') so
+        // abandoned drafts don't burn slots in the counter.
         const draft = new Requirement({
             chapterId: this.currentChapter.id,
             elementId: this.currentElement ? this.currentElement.id : null
         });
+        draft.id = '(draft)';
         if (this.currentChapter.subjectMode === 'system') draft.subject = 'the system';
         else if (this.currentElement) draft.subject = this.currentElement.name;
         return draft;
@@ -134,6 +140,7 @@ class EditorView {
         const pct = validator.chapterCompleteness(this.currentChapter);
         chapterBadgeEl.textContent = `${pct}% checklist`;
         chapterBadgeEl.className = 'badge ' + (pct === 100 ? 'bg-success' : pct >= 50 ? 'bg-warning text-dark' : 'bg-danger');
+        chapterBadgeEl.title = `${pct}% of this chapter's completeness checklist is ticked. 100% is required before signoff.`;
 
         // Intro
         const intro = document.createElement('div');
@@ -158,6 +165,10 @@ class EditorView {
 
         // Declarations block (if this chapter manages declarations)
         if (this.currentChapter.declarations) {
+            // Shared autocomplete datalist used by any row with
+            // list="owners-datalist" — rendered before the rows so
+            // the input→datalist link resolves on first paint.
+            container.appendChild(this._renderOwnerDatalist());
             this.currentChapter.declarations.forEach(d => {
                 container.appendChild(this._renderDeclarationTable(d));
             });
@@ -212,8 +223,9 @@ class EditorView {
         const current = this.doc.signoffs[this.currentChapter.id];
         signoff.innerHTML = `
             <label style="font-size:12px;font-weight:600;">Signoff (chapter owner):</label>
-            <input type="text" class="form-control form-control-sm" id="signoffInput"
-                   placeholder="Name" value="${current ? current.owner : ''}" style="max-width:240px;display:inline-block;margin-left:0.5rem;">
+            <input type="text" list="owners-datalist" class="form-control form-control-sm" id="signoffInput"
+                   placeholder="Name" value="${current ? current.owner : ''}" style="max-width:240px;display:inline-block;margin-left:0.5rem;"
+                   title="Pick from previously-used names or type a new one. Names are remembered in the project file.">
             <button class="btn btn-sm btn-outline-success" id="signoffBtn" style="margin-left:0.5rem;">Sign</button>
             ${current ? `<span style="margin-left:1rem;font-size:11px;color:#198754;">Signed by ${current.owner} on ${new Date(current.timestamp).toLocaleString()}</span>` : ''}
         `;
@@ -221,6 +233,8 @@ class EditorView {
             const name = signoff.querySelector('#signoffInput').value.trim();
             if (!name) { alert('Enter signoff name first.'); return; }
             this.doc.signoffs[this.currentChapter.id] = { owner: name, timestamp: new Date().toISOString() };
+            // Bank the name so future signoff inputs autocomplete to it.
+            this.doc.addToLexicon('signoffNames', name);
             this.onChange();
         });
         wrap.appendChild(signoff);
@@ -228,13 +242,39 @@ class EditorView {
     }
 
     // ---- Declarations ----
+    /**
+     * Renders one declaration table (item functions, modes, etc.).
+     *
+     * Click-twice bug fix
+     * -------------------
+     * The previous version bound a `change` listener to *every* input
+     * which called this.onChange() → renderAll() → full pane teardown.
+     * The sequence was:
+     *   user types in row → mousedown on "+ Add" → input loses focus
+     *   → change fires → renderAll() destroys the live "+ Add" button
+     *   → click never reaches the (gone) button → user has to click again.
+     *
+     * The fix splits the event policy by control type:
+     *   - text/textarea/list inputs: `input` event → write to model only,
+     *     no re-render. Focus is preserved while typing. The summary pane
+     *     goes briefly stale on names but catches up on next add/remove
+     *     or chapter switch — acceptable since names don't change counts.
+     *   - select/checkbox: `change` event → write + full re-render
+     *     (these affect summary status badges and never suffer focus loss
+     *     because the user clicks them directly).
+     */
     _renderDeclarationTable(kind) {
         const wrap = document.createElement('div');
         wrap.className = 'requirements-section';
         const config = DECLARATION_CONFIG[kind];
         if (!config) return wrap;
 
-        wrap.innerHTML = `<div class="section-title">${config.title}</div>`;
+        // Section title with optional `?` info icon. The icon is keyed
+        // on config.sectionHelp; if absent, no icon is rendered.
+        const titleHtml = config.sectionHelp
+            ? `${config.title} <span class="help-icon" title="${config.sectionHelp}">?</span>`
+            : config.title;
+        wrap.innerHTML = `<div class="section-title">${titleHtml}</div>`;
 
         // Table of existing
         const list = config.getList(this.doc);
@@ -244,29 +284,54 @@ class EditorView {
             header.style.display = 'grid';
             header.style.gridTemplateColumns = config.gridCols;
             header.style.gap = '0.4rem';
-            header.innerHTML = config.headers.map(h => `<div>${h}</div>`).join('');
+            // Per-column hover help: if config.helpHeaders[label] exists
+            // we append a small `?` superscript with the explanation.
+            header.innerHTML = config.headers.map(h => {
+                const help = config.helpHeaders && config.helpHeaders[h];
+                return help
+                    ? `<div>${h} <span class="help-icon" title="${help.replace(/"/g,'&quot;')}">?</span></div>`
+                    : `<div>${h}</div>`;
+            }).join('');
             wrap.appendChild(header);
         }
+
         list.forEach(item => {
             const row = document.createElement('div');
             row.className = 'declaration-row';
             row.style.gridTemplateColumns = config.gridCols;
             row.innerHTML = config.renderRow(item);
+
             row.querySelector('.del-btn').addEventListener('click', () => {
                 config.remove(this.doc, item.id);
                 this.onChange();
             });
-            // Bind input change handlers
-            row.querySelectorAll('input, select').forEach(inp => {
+
+            // Text inputs: live write on `input`, no re-render.
+            // Avoids the click-twice bug entirely — the user can mouse
+            // straight from a half-typed input onto "+ Add" and the
+            // first click registers because no DOM teardown happens
+            // mid-flight.
+            row.querySelectorAll('input[type="text"]').forEach(inp => {
+                inp.addEventListener('input', () => {
+                    config.updateFromRow(this.doc, item.id, row);
+                });
+            });
+
+            // Selects + checkboxes: write + full re-render. Safe
+            // because clicking these means the user already left any
+            // text input, so there's no in-flight focus to clobber.
+            row.querySelectorAll('select, input[type="checkbox"]').forEach(inp => {
                 inp.addEventListener('change', () => {
                     config.updateFromRow(this.doc, item.id, row);
                     this.onChange();
                 });
             });
+
             wrap.appendChild(row);
         });
 
-        // Add button
+        // Add button — works on first click now that text edits no
+        // longer trigger renderAll() during their blur.
         const btn = document.createElement('button');
         btn.className = 'btn btn-sm btn-outline-primary btn-add';
         btn.textContent = `+ Add ${config.singular}`;
@@ -278,6 +343,31 @@ class EditorView {
         wrap.appendChild(btn);
 
         return wrap;
+    }
+
+    /**
+     * Shared <datalist> for owner / signoff name autocomplete.
+     * Rendered once per chapter, referenced by `list="owners-datalist"`
+     * on any input that accepts a person-name. No JS, no popup library —
+     * native browser datalist handles the suggestions.
+     */
+    _renderOwnerDatalist() {
+        const dl = document.createElement('datalist');
+        dl.id = 'owners-datalist';
+        const names = new Set();
+        // From assumption owners
+        (this.doc.assumptions || []).forEach(a => { if (a.owner) names.add(a.owner); });
+        // From signoffs
+        Object.values(this.doc.signoffs || {}).forEach(s => { if (s && s.owner) names.add(s.owner); });
+        // From persisted lexicon
+        (this.doc.lexicon && this.doc.lexicon.owners || []).forEach(n => { if (n) names.add(n); });
+        (this.doc.lexicon && this.doc.lexicon.signoffNames || []).forEach(n => { if (n) names.add(n); });
+        names.forEach(n => {
+            const opt = document.createElement('option');
+            opt.value = n;
+            dl.appendChild(opt);
+        });
+        return dl;
     }
 
     // ---- Requirement builder (SMART input) ----
@@ -497,6 +587,32 @@ class EditorView {
             alert('Cannot commit: validation errors remain.\n\n' + errors.join('\n'));
             return;
         }
+        // Allocate the real sequential ID now (not at draft creation),
+        // so abandoned drafts don't leak slots in idCounters.
+        this.draftReq.id = this.doc.nextId('requirement');
+
+        // Bank free-text predicate-slot values into the lexicon so the
+        // next requirement gets autocomplete suggestions for the same
+        // kind of slot. Phase 3 will surface these via datalists in
+        // the SMART builder.
+        const r = this.draftReq;
+        const lex = (cat, val) => this.doc.addToLexicon(cat, val);
+        lex('capabilities', r.capability);
+        lex('actors',       r.actor);
+        lex('conditions',   r.condition);
+        lex('reactions',    r.reaction);
+        lex('triggers',     r.trigger);
+        lex('inputs',       r.input);
+        lex('outputs',      r.output);
+        lex('properties',   r.property);
+        lex('units',        r.unit);
+        lex('tolerances',   r.tolerance);
+        lex('standards',    r.standard);
+        lex('fromStates',   r.fromState);
+        lex('toStates',     r.toState);
+        lex('prohibitedBehaviors', r.prohibitedBehavior);
+        lex('boundingConditions',  r.boundingCondition);
+
         this.doc.requirements.push(this.draftReq);
         this.draftReq = this._newDraft();
         this.onChange();
@@ -538,18 +654,26 @@ class EditorView {
 
             const asilClass = req.asil ? `asil-${req.asil.toLowerCase()}` : '';
 
+            const asilTitles = {
+                'QM': 'Quality Management — no integrity requirement beyond standard QM.',
+                'A':  'ASIL A — lowest safety integrity. Failure could cause light/moderate injury.',
+                'B':  'ASIL B — moderate integrity.',
+                'C':  'ASIL C — high integrity.',
+                'D':  'ASIL D — highest integrity. Failure could be life-threatening.'
+            };
+
             item.innerHTML = `
                 <div class="req-item-header">
-                    <span class="req-id">${req.id} ${statusDot}</span>
-                    <button class="req-delete" title="Delete">✕</button>
+                    <span class="req-id" title="Internal stable ID. References use this.">${req.id} ${statusDot}</span>
+                    <button class="req-delete" title="Delete this requirement">✕</button>
                 </div>
                 <div>${req.statement}</div>
                 <div class="req-badges">
-                    ${req.asil ? `<span class="req-badge ${asilClass}">ASIL ${req.asil}</span>` : ''}
-                    ${req.verification ? `<span class="req-badge">Verif: ${req.verification}</span>` : ''}
-                    ${req.parentSG ? `<span class="req-badge">→ ${req.parentSG}</span>` : ''}
-                    ${req.ftti ? `<span class="req-badge">FTTI ${req.ftti}</span>` : ''}
-                    ${req.source ? `<span class="req-badge">src: ${req.source}</span>` : ''}
+                    ${req.asil ? `<span class="req-badge ${asilClass}" title="${(asilTitles[req.asil] || 'Safety integrity level').replace(/"/g,'&quot;')}">ASIL ${req.asil}</span>` : ''}
+                    ${req.verification ? `<span class="req-badge" title="Verification method assigned to this requirement.">Verif: ${req.verification}</span>` : ''}
+                    ${req.parentSG ? `<span class="req-badge" title="Parent Safety Goal — this requirement contributes to satisfying it.">→ ${this.doc.nameForId(req.parentSG)}</span>` : ''}
+                    ${req.ftti ? `<span class="req-badge" title="Fault Tolerant Time Interval contribution from this requirement.">FTTI ${req.ftti}</span>` : ''}
+                    ${req.source ? `<span class="req-badge" title="Upstream source — the ID of the parent that this requirement traces from.">src: ${req.source}</span>` : ''}
                 </div>
                 ${req.rationale ? `<div style="font-size:11px;color:#666;margin-top:0.3rem;"><em>Rationale:</em> ${req.rationale}</div>` : ''}
             `;
@@ -661,138 +785,205 @@ const DECLARATION_CONFIG = {
     itemFunction: {
         title: 'Item Functions',
         singular: 'Item Function',
+        // Tooltip text shown on header `?` icons. Helps the user understand
+        // what each column wants without bloating the UI.
+        helpHeaders: {
+            'Name':        'Short, stable label. Stays the same across the project.',
+            'Description': 'What this function does for the end-user. One sentence, observable behaviour, no implementation detail.'
+        },
         headers: ['ID', 'Name', 'Description', '', ''],
         gridCols: '90px 1fr 1fr 80px 40px',
         getList: doc => doc.itemFunctions,
-        add: doc => doc.itemFunctions.push(new ItemFunction({ name: 'New function' })),
+        add: doc => {
+            const f = new ItemFunction(); // empty defaults — placeholder only
+            f.id = doc.nextId('itemFunction');
+            doc.itemFunctions.push(f);
+        },
         remove: (doc, id) => { doc.itemFunctions = doc.itemFunctions.filter(x => x.id !== id); },
         updateFromRow: (doc, id, row) => {
             const item = doc.itemFunctions.find(x => x.id === id);
+            if (!item) return;
             const inputs = row.querySelectorAll('input');
             item.name = inputs[0].value;
             item.description = inputs[1].value;
         },
         renderRow: item => `
-            <div class="req-id" style="align-self:center;">${item.id}</div>
-            <input type="text" value="${(item.name || '').replace(/"/g,'&quot;')}" placeholder="Function name">
-            <input type="text" value="${(item.description || '').replace(/"/g,'&quot;')}" placeholder="Description">
+            <div class="req-id" style="align-self:center;" title="Internal stable ID. References use this; UI shows the name.">${item.id}</div>
+            <input type="text" value="${(item.name || '').replace(/"/g,'&quot;')}" placeholder="e.g. Adaptive Cruise Control">
+            <input type="text" value="${(item.description || '').replace(/"/g,'&quot;')}" placeholder="What does this function do for the end-user?">
             <div></div>
-            <button class="del-btn req-delete">✕</button>
+            <button class="del-btn req-delete" title="Delete this item function">✕</button>
         `
     },
     mode: {
         title: 'Operating Modes',
         singular: 'Mode',
-        headers: ['ID', 'Name', 'Description', 'Safe?', ''],
-        gridCols: '90px 1fr 1fr 80px 40px',
+        helpHeaders: {
+            'Name':        'Short ID-style name for the mode (e.g. "Nominal", "Degraded", "Safe").',
+            'Description': 'What is true while the system is in this mode? Behaviour, constraints, observable state.',
+            'Safe state?': 'Tick if this mode is a designated safe state per the system-level safe-state model. Safety Goals will reference these.'
+        },
+        // Header was "Safe?" — too cryptic. "Safe state?" matches the
+        // ISO 26262 vocabulary the user is actually trying to capture.
+        headers: ['ID', 'Name', 'Description', 'Safe state?', ''],
+        gridCols: '90px 1fr 1fr 100px 40px',
         getList: doc => doc.modes,
-        add: doc => doc.modes.push(new Mode({ name: 'New mode' })),
+        add: doc => {
+            const m = new Mode();
+            m.id = doc.nextId('mode');
+            doc.modes.push(m);
+        },
         remove: (doc, id) => { doc.modes = doc.modes.filter(x => x.id !== id); },
         updateFromRow: (doc, id, row) => {
             const item = doc.modes.find(x => x.id === id);
+            if (!item) return;
             const inputs = row.querySelectorAll('input');
             item.name = inputs[0].value;
             item.description = inputs[1].value;
             item.isSafeState = inputs[2].checked;
         },
         renderRow: item => `
-            <div class="req-id" style="align-self:center;">${item.id}</div>
-            <input type="text" value="${(item.name||'').replace(/"/g,'&quot;')}" placeholder="Mode name">
-            <input type="text" value="${(item.description||'').replace(/"/g,'&quot;')}" placeholder="Description">
-            <input type="checkbox" ${item.isSafeState ? 'checked' : ''} style="justify-self:center;">
-            <button class="del-btn req-delete">✕</button>
+            <div class="req-id" style="align-self:center;" title="Internal stable ID.">${item.id}</div>
+            <input type="text" value="${(item.name||'').replace(/"/g,'&quot;')}" placeholder="e.g. Nominal, Degraded, Safe">
+            <input type="text" value="${(item.description||'').replace(/"/g,'&quot;')}" placeholder="What is true while in this mode?">
+            <input type="checkbox" ${item.isSafeState ? 'checked' : ''} style="justify-self:center;" title="Designated safe state — Safety Goals can reference this mode.">
+            <button class="del-btn req-delete" title="Delete this mode">✕</button>
         `
     },
     assumption: {
         title: 'Assumptions of Use',
         singular: 'Assumption',
+        helpHeaders: {
+            'Owner':  'Person responsible for closing this assumption. Type freely; previously-used names appear as suggestions.',
+            'Status': 'Open until verified, evidenced, or designed-out; closed when retired with rationale captured elsewhere.'
+        },
         headers: ['ID', 'Text', 'Owner', 'Status', ''],
         gridCols: '90px 1fr 1fr 80px 40px',
         getList: doc => doc.assumptions,
-        add: doc => doc.assumptions.push(new Assumption({ text: 'New assumption' })),
+        add: doc => {
+            const a = new Assumption();
+            a.id = doc.nextId('assumption');
+            doc.assumptions.push(a);
+        },
         remove: (doc, id) => { doc.assumptions = doc.assumptions.filter(x => x.id !== id); },
         updateFromRow: (doc, id, row) => {
             const item = doc.assumptions.find(x => x.id === id);
+            if (!item) return;
             const inputs = row.querySelectorAll('input, select');
             item.text = inputs[0].value;
             item.owner = inputs[1].value;
             item.status = inputs[2].value;
+            // Bank the owner so future rows autocomplete to it.
+            doc.addToLexicon('owners', item.owner);
         },
+        // The `list="owners-datalist"` attribute hooks the input to the
+        // shared datalist rendered once per chapter (see _renderOwnerDatalist).
         renderRow: item => `
-            <div class="req-id" style="align-self:center;">${item.id}</div>
-            <input type="text" value="${(item.text||'').replace(/"/g,'&quot;')}" placeholder="Assumption text">
-            <input type="text" value="${(item.owner||'').replace(/"/g,'&quot;')}" placeholder="Owner">
+            <div class="req-id" style="align-self:center;" title="Internal stable ID.">${item.id}</div>
+            <input type="text" value="${(item.text||'').replace(/"/g,'&quot;')}" placeholder="State the assumption (one sentence)">
+            <input type="text" list="owners-datalist" value="${(item.owner||'').replace(/"/g,'&quot;')}" placeholder="Owner">
             <select><option ${item.status==='open'?'selected':''}>open</option><option ${item.status==='closed'?'selected':''}>closed</option></select>
-            <button class="del-btn req-delete">✕</button>
+            <button class="del-btn req-delete" title="Delete this assumption">✕</button>
         `
     },
     safetyGoal: {
         title: 'Safety Goals',
         singular: 'Safety Goal',
-        headers: ['ID', 'Name', 'ASIL', 'FTTI', ''],
-        gridCols: '90px 1fr 80px 100px 40px',
+        helpHeaders: {
+            'Name': 'Hazard-derived goal, phrased as the avoidance condition (e.g. "Avoid unintended deceleration").',
+            'SIL/ASIL': 'ISO 26262 ASIL or IEC 61508 SIL, or QM if non-safety. Phase 2 will surface the full SIL+ASIL list and a HARA reference field.',
+            'FTTI': 'Fault Tolerant Time Interval — quantified time, e.g. "1 s" or "200 ms".'
+        },
+        headers: ['ID', 'Name', 'SIL/ASIL', 'FTTI', ''],
+        gridCols: '90px 1fr 100px 100px 40px',
         getList: doc => doc.safetyGoals,
-        add: doc => doc.safetyGoals.push(new SafetyGoal({ name: 'New SG' })),
+        add: doc => {
+            const g = new SafetyGoal();
+            g.id = doc.nextId('safetyGoal');
+            doc.safetyGoals.push(g);
+        },
         remove: (doc, id) => { doc.safetyGoals = doc.safetyGoals.filter(x => x.id !== id); },
         updateFromRow: (doc, id, row) => {
             const item = doc.safetyGoals.find(x => x.id === id);
+            if (!item) return;
             const inputs = row.querySelectorAll('input, select');
             item.name = inputs[0].value;
             item.asil = inputs[1].value;
             item.ftti = inputs[2].value;
         },
         renderRow: item => `
-            <div class="req-id" style="align-self:center;">${item.id}</div>
-            <input type="text" value="${(item.name||'').replace(/"/g,'&quot;')}" placeholder="SG name">
-            <select>${GRAMMAR.asilLevels.map(a=>`<option ${item.asil===a?'selected':''}>${a}</option>`).join('')}</select>
+            <div class="req-id" style="align-self:center;" title="Internal stable ID.">${item.id}</div>
+            <input type="text" value="${(item.name||'').replace(/"/g,'&quot;')}" placeholder="Avoidance condition (e.g. 'Avoid unintended deceleration')">
+            <select title="ISO 26262 ASIL or IEC 61508 SIL. Phase 2 expands this list.">${GRAMMAR.asilLevels.map(a=>`<option ${item.asil===a?'selected':''}>${a}</option>`).join('')}</select>
             <input type="text" value="${(item.ftti||'').replace(/"/g,'&quot;')}" placeholder="e.g. 1 s">
-            <button class="del-btn req-delete">✕</button>
+            <button class="del-btn req-delete" title="Delete this Safety Goal">✕</button>
         `
     },
     element: {
         title: 'System Elements',
         singular: 'Element',
+        helpHeaders: {
+            'Name':    'Stable element identifier, no spaces (e.g. SteeringECU). The user-facing display name.',
+            'Purpose': 'One-sentence statement of why the element exists in the architecture.',
+            'ASIL':    'Inherited or decomposed ASIL. Phase 2 widens this to SIL+ASIL.'
+        },
         headers: ['ID', 'Name', 'Purpose', 'ASIL', ''],
         gridCols: '90px 1fr 1fr 80px 40px',
         getList: doc => doc.elements,
-        add: doc => doc.elements.push(new Element({ name: 'NewElement', asil: 'QM' })),
+        add: doc => {
+            const el = new Element();
+            el.id = doc.nextId('element');
+            el.asil = 'QM';
+            doc.elements.push(el);
+        },
         remove: (doc, id) => { doc.elements = doc.elements.filter(x => x.id !== id); },
         updateFromRow: (doc, id, row) => {
             const item = doc.elements.find(x => x.id === id);
+            if (!item) return;
             const inputs = row.querySelectorAll('input, select');
             item.name = inputs[0].value;
             item.purpose = inputs[1].value;
             item.asil = inputs[2].value;
         },
         renderRow: item => `
-            <div class="req-id" style="align-self:center;">${item.id}</div>
+            <div class="req-id" style="align-self:center;" title="Internal stable ID.">${item.id}</div>
             <input type="text" value="${(item.name||'').replace(/"/g,'&quot;')}" placeholder="Element name (no spaces)">
             <input type="text" value="${(item.purpose||'').replace(/"/g,'&quot;')}" placeholder="One-sentence purpose">
-            <select>${GRAMMAR.asilLevels.map(a=>`<option ${item.asil===a?'selected':''}>${a}</option>`).join('')}</select>
-            <button class="del-btn req-delete">✕</button>
+            <select title="Inherited or decomposed ASIL.">${GRAMMAR.asilLevels.map(a=>`<option ${item.asil===a?'selected':''}>${a}</option>`).join('')}</select>
+            <button class="del-btn req-delete" title="Delete this element">✕</button>
         `
     },
     interface: {
         title: 'External Interfaces',
         singular: 'Interface',
+        helpHeaders: {
+            'Name':     'Interface label (e.g. CAN_PT, LIN_BCM, HV_BUS).',
+            'Producer': 'Element or external system originating the data/signal.',
+            'Consumer': 'Element or external system receiving the data/signal. Phase 2 expands this row with direction, HW/SW, and SMART signal properties.'
+        },
         headers: ['ID', 'Name', 'Producer', 'Consumer', ''],
         gridCols: '90px 1fr 1fr 1fr 40px',
         getList: doc => doc.interfaces,
-        add: doc => doc.interfaces.push(new InterfaceSpec({ name: 'NewIF' })),
+        add: doc => {
+            const iface = new InterfaceSpec();
+            iface.id = doc.nextId('interfaceSpec');
+            doc.interfaces.push(iface);
+        },
         remove: (doc, id) => { doc.interfaces = doc.interfaces.filter(x => x.id !== id); },
         updateFromRow: (doc, id, row) => {
             const item = doc.interfaces.find(x => x.id === id);
+            if (!item) return;
             const inputs = row.querySelectorAll('input');
             item.name = inputs[0].value;
             item.producer = inputs[1].value;
             item.consumer = inputs[2].value;
         },
         renderRow: item => `
-            <div class="req-id" style="align-self:center;">${item.id}</div>
-            <input type="text" value="${(item.name||'').replace(/"/g,'&quot;')}" placeholder="Interface name">
+            <div class="req-id" style="align-self:center;" title="Internal stable ID.">${item.id}</div>
+            <input type="text" value="${(item.name||'').replace(/"/g,'&quot;')}" placeholder="e.g. CAN_PT">
             <input type="text" value="${(item.producer||'').replace(/"/g,'&quot;')}" placeholder="Producer">
             <input type="text" value="${(item.consumer||'').replace(/"/g,'&quot;')}" placeholder="Consumer">
-            <button class="del-btn req-delete">✕</button>
+            <button class="del-btn req-delete" title="Delete this interface">✕</button>
         `
     },
     modeTransition: {

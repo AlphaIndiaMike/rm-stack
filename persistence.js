@@ -42,7 +42,14 @@ class Persistence {
 
     static migrate(data) {
         // Forward migrations live here as new schema versions ship.
+        // The SyrsDocument constructor is defensive about missing fields
+        // (idCounters, lexicon) and seeds counters from existing IDs, so
+        // v1→v2 is a transparent bump. Future versions chain below.
         if (!data.schemaVersion) data.schemaVersion = 1;
+        if (data.schemaVersion === 1) {
+            data.schemaVersion = 2;
+            // idCounters and lexicon are filled in by the constructor.
+        }
         return data;
     }
 }

@@ -87,7 +87,7 @@ const OUTLINES = {
         {
             id: 'ch04_fsc',
             number: '4',
-            title: 'Functional Safety Concept Summary',
+            title: 'Functional Safety Concept',
             intro: 'FSRs, warning and degradation concept, emergency operation.',
             allowsRequirements: true,
             subjectMode: 'system',
@@ -96,7 +96,7 @@ const OUTLINES = {
                 { id: 'c4a', text: 'Every Safety Goal has ≥1 FSR.' },
                 { id: 'c4b', text: 'Every FSR has parent SG, allocation, ASIL, safe-state ref, FTTI contribution.' },
                 { id: 'c4c', text: 'Warning and degradation concept present.' },
-                { id: 'c4d', text: 'Driver-in-the-loop assumptions explicit.' },
+                { id: 'c4d', text: 'End-user supervision assumptions explicit.' },
                 { id: 'c4e', text: 'Emergency operation strategy present or explicit N/A.' }
             ]
         },
@@ -189,7 +189,7 @@ const OUTLINES = {
         {
             id: 'ch10_hw',
             number: '10',
-            title: 'HW Safety Requirements (Summary)',
+            title: 'HW Safety Requirements',
             intro: 'High-level HW-SRs with DC targets. Full detail in HW-RS document.',
             allowsRequirements: true,
             subjectMode: 'element',
@@ -204,7 +204,7 @@ const OUTLINES = {
         {
             id: 'ch11_sw',
             number: '11',
-            title: 'SW Safety Requirements (Summary)',
+            title: 'SW Safety Requirements',
             intro: 'High-level SW-SRs. Full detail in SW-RS document.',
             allowsRequirements: true,
             subjectMode: 'element',

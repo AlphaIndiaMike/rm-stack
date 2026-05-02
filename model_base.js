@@ -3,7 +3,39 @@
  *
  * Core data classes. All serialize to/from plain JSON objects.
  * The document is the aggregation.
+ *
+ * IDs
+ * ---
+ * IDs are stable handles. They use a discipline-wide prefix and a
+ * zero-padded 4-digit sequential suffix (e.g. ITEMF-0007). The counter
+ * is persisted in `doc.idCounters` so it survives save/load and never
+ * collides on round-trip. Old random-suffix IDs (ITEMF-A1B2) loaded
+ * from legacy files are preserved as-is; the counter seeds itself to
+ * `max(numericSuffix, count) + 1` so newly-added items get clean
+ * sequential IDs even alongside legacy ones.
+ *
+ * IDs are stored on every object. The UI displays *names* (rename-safe),
+ * not IDs, but cross-object references in the JSON use IDs so a rename
+ * never breaks a link.
+ *
+ * Lexicon
+ * -------
+ * `doc.lexicon` collects free-text values typed into structured
+ * predicate slots (capability, actor, condition, ...) plus owners and
+ * signoff names, so the next time the user types into the same kind
+ * of slot they get autocomplete suggestions. Passive — never enforced.
  */
+
+const ID_PREFIX = {
+    requirement:    'REQ',
+    itemFunction:   'ITEMF',
+    mode:           'MODE',
+    modeTransition: 'TR',
+    assumption:     'AOU',
+    safetyGoal:     'SG',
+    element:        'ELEM',
+    interfaceSpec:  'IF'
+};
 
 class Requirement {
     constructor(data) {
@@ -59,6 +91,11 @@ class Requirement {
         this.modifiedAt    = data.modifiedAt || this.createdAt;
     }
 
+    /**
+     * Fallback ID generator. Used only when an instance is constructed
+     * outside the document factory (e.g. legacy code paths). Real IDs
+     * are assigned by SyrsDocument.nextId(kind) at commit time.
+     */
     static generateId() {
         return 'REQ-' + Math.random().toString(36).substr(2, 6).toUpperCase();
     }
@@ -168,7 +205,7 @@ class Assumption {
 class SyrsDocument {
     constructor(data) {
         data = data || {};
-        this.schemaVersion = 1;
+        this.schemaVersion = 2;
         this.discipline    = data.discipline || 'system';
         this.docClass      = data.docClass || 'complex';
         this.title         = data.title || 'Untitled System Requirements Specification';
@@ -181,8 +218,97 @@ class SyrsDocument {
         this.assumptions   = (data.assumptions || []).map(a => new Assumption(a));
         this.checklistState = data.checklistState || {}; // { chapterId: { checkId: bool } }
         this.signoffs      = data.signoffs || {};         // { chapterId: { owner, timestamp } }
+
+        // Persisted ID counters: { itemFunction: 7, mode: 3, ... }.
+        // Seeded from existing IDs on load so new items continue the sequence.
+        this.idCounters    = data.idCounters || {};
+
+        // Persisted vocabulary for autocomplete. Categories cover predicate
+        // slots and people-name fields. Adding a new category is safe; the
+        // default-empty dance below will fill it in.
+        this.lexicon       = data.lexicon || {};
+        ['capabilities','actors','conditions','reactions','triggers',
+         'inputs','outputs','properties','units','tolerances','standards',
+         'fromStates','toStates','prohibitedBehaviors','boundingConditions',
+         'owners','signoffNames'].forEach(k => {
+             if (!Array.isArray(this.lexicon[k])) this.lexicon[k] = [];
+        });
+
         this.createdAt     = data.createdAt || new Date().toISOString();
         this.modifiedAt    = data.modifiedAt || this.createdAt;
+
+        // Backfill counters from any existing IDs we already loaded.
+        this._seedIdCounters();
+    }
+
+    /**
+     * Seed every counter to (max-numeric-suffix-found, collection-size).
+     * Legacy random-suffix IDs don't match the regex and are skipped, so
+     * a freshly-seeded counter starts at the size of the collection.
+     */
+    _seedIdCounters() {
+        const sources = [
+            ['requirement',    this.requirements],
+            ['itemFunction',   this.itemFunctions],
+            ['mode',           this.modes],
+            ['assumption',     this.assumptions],
+            ['safetyGoal',     this.safetyGoals],
+            ['element',        this.elements],
+            ['interfaceSpec',  this.interfaces]
+        ];
+        sources.forEach(([kind, arr]) => {
+            const prefix = ID_PREFIX[kind];
+            let max = this.idCounters[kind] || 0;
+            (arr || []).forEach(it => {
+                if (!it || !it.id) return;
+                const m = new RegExp('^' + prefix + '-(\\d+)$').exec(it.id);
+                if (m) max = Math.max(max, parseInt(m[1], 10));
+            });
+            // Ensure counter is at least the current collection size, so
+            // documents with legacy random IDs never re-issue 0001.
+            this.idCounters[kind] = Math.max(max, (arr || []).length);
+        });
+    }
+
+    /**
+     * Allocate the next ID for `kind`. Persisted in idCounters so the
+     * sequence survives save/load.
+     */
+    nextId(kind) {
+        const prefix = ID_PREFIX[kind];
+        if (!prefix) throw new Error('Unknown id kind: ' + kind);
+        const next = (this.idCounters[kind] || 0) + 1;
+        this.idCounters[kind] = next;
+        return prefix + '-' + String(next).padStart(4, '0');
+    }
+
+    /**
+     * Display name for any object referenced by ID. Falls back to the ID
+     * if the target was deleted, so dangling references never render as
+     * "(undefined)". Used by UI everywhere a name is shown for an ID.
+     */
+    nameForId(id) {
+        if (!id) return '';
+        const all = [
+            ...this.itemFunctions, ...this.elements, ...this.safetyGoals,
+            ...this.modes, ...this.interfaces, ...this.assumptions,
+            ...this.requirements
+        ];
+        const hit = all.find(x => x && x.id === id);
+        if (!hit) return id; // dangling — show ID so user can debug
+        return hit.name || hit.text || id;
+    }
+
+    /**
+     * Push a value into a lexicon category if not already present.
+     * Used by the editor on every commit so vocabulary builds up.
+     */
+    addToLexicon(category, value) {
+        if (!value) return;
+        const v = String(value).trim();
+        if (!v) return;
+        if (!Array.isArray(this.lexicon[category])) this.lexicon[category] = [];
+        if (!this.lexicon[category].includes(v)) this.lexicon[category].push(v);
     }
 
     toJSON() {
@@ -200,6 +326,8 @@ class SyrsDocument {
             assumptions: this.assumptions.map(a => a.toJSON()),
             checklistState: this.checklistState,
             signoffs: this.signoffs,
+            idCounters: this.idCounters,
+            lexicon: this.lexicon,
             createdAt: this.createdAt,
             modifiedAt: new Date().toISOString()
         };

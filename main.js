@@ -9,6 +9,12 @@ let outlineView, editorView, summaryView;
 
 document.addEventListener('DOMContentLoaded', () => {
 
+    // Custom tooltip layer — replaces native `title` with an instant,
+    // cursor-following bubble. Reads from any element that already
+    // carries `title` or `data-tip`. Single global instance lives for
+    // the lifetime of the page.
+    new TooltipManager();
+
     // --- Initial document ---
     doc = new SyrsDocument({ discipline: 'system', docClass: 'complex' });
 
@@ -105,4 +111,5 @@ function renderAll() {
     const counter = document.getElementById('budgetCounter');
     counter.textContent = `${s.count} / ${s.max}`;
     counter.className = 'badge ' + (s.overBudget ? 'bg-danger' : s.percent > 80 ? 'bg-warning text-dark' : 'bg-secondary');
+    counter.title = `Total committed requirements (${s.count}) vs the document-class ceiling (${s.max}). Going over budget is the cue to split into HW-RS / SW-RS documents.`;
 }

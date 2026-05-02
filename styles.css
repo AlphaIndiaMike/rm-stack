@@ -459,3 +459,64 @@ html, body {
 .outline-chapter.active .outline-count {
     color: rgba(255, 255, 255, 0.85);
 }
+
+/* Hover help icon (the small `?` glyph next to confusing labels).
+   Native `title` tooltip — no popover library, no JS. The element
+   stays small and unobtrusive so columns/headers don't shift. */
+.help-icon {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    line-height: 14px;
+    text-align: center;
+    border-radius: 50%;
+    background: #dee2e6;
+    color: #495057;
+    font-size: 10px;
+    font-weight: 600;
+    cursor: help;
+    margin-left: 4px;
+    user-select: none;
+    vertical-align: middle;
+}
+.help-icon:hover { background: #adb5bd; color: #fff; }
+.summary-section h6 .help-icon { background: transparent; color: #aaa; border: 1px solid #ccc; }
+.summary-section h6 .help-icon:hover { background: #e9ecef; color: #495057; }
+
+/* Custom tooltip — single shared element managed by TooltipManager.
+   Native `title` is too slow and unreliable on tiny inline targets
+   (badges, dots, glyphs). This replaces it with a fixed-position bubble
+   that opens immediately and follows the cursor. `pointer-events: none`
+   so the bubble itself never intercepts mouse events on what's beneath. */
+.custom-tooltip {
+    position: fixed;
+    z-index: 10000;
+    top: 0;
+    left: 0;
+    max-width: 320px;
+    padding: 6px 10px;
+    background: rgba(33, 37, 41, 0.96);
+    color: #fff;
+    font-size: 12px;
+    line-height: 1.4;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    white-space: normal;
+    word-wrap: break-word;
+    transition: opacity 60ms ease-out;
+}
+.custom-tooltip.visible {
+    opacity: 1;
+    visibility: visible;
+}
+/* Cursor hint on anything that exposes a tooltip — small affordance
+   so the user knows hovering will reveal something. */
+[data-tip], .help-icon, .completeness-dot, .count-badge,
+.req-badge, .req-id { cursor: help; }
+/* Override the help cursor on inputs/buttons that also have title — those
+   should keep their normal interaction cursor. */
+input[title], select[title], button[title], textarea[title] { cursor: auto; }
+button[title] { cursor: pointer; }
