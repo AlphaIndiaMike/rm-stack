@@ -65,7 +65,8 @@ const OUTLINES = {
                 { id: 'c2e', text: 'Every item function mapped to active modes.' },
                 { id: 'c2f', text: 'Environmental envelope quantified (no adjectives).' },
                 { id: 'c2g', text: 'Assumptions of use enumerated with IDs.' },
-                { id: 'c2h', text: 'Reference to full item definition document with version.' }
+                { id: 'c2h', text: 'Reference to full item definition document with version.',
+                  help: 'You don\'t need to enter anything here. If you have the formal Item Definition document at hand (Word/PDF/Polarion), tick this box. Otherwise leave it unchecked until the document exists.' }
             ]
         },
         {
@@ -75,10 +76,11 @@ const OUTLINES = {
             intro: 'Input from HARA. Every SG carries ASIL, safe state, FTTI.',
             allowsRequirements: false,
             subjectMode: 'none',
-            declarations: ['safetyGoal'],
+            declarations: ['safetyGoal', 'safeState'],
             checklist: [
                 { id: 'c3a', text: 'Every Safety Goal has ID, hazard ref, ASIL, safe state(s), FTTI.' },
-                { id: 'c3b', text: 'Every Safety Goal traces back to a HARA entry.' },
+                { id: 'c3b', text: 'Every Safety Goal traces back to a HARA entry.',
+                  help: 'HARA = Hazard Analysis and Risk Assessment (ISO 26262-3:6 / equivalent systematic hazard ID per IEC 61508-1:7.4). If you have the HARA at hand, every Safety Goal listed above should map to an identified hazard scenario. Tick when verified — no field to fill in here.' },
                 { id: 'c3c', text: 'No Safety Goal without ASIL (QM explicit if applicable).' },
                 { id: 'c3d', text: 'Safe states cross-referenced to mode/state model.' },
                 { id: 'c3e', text: 'HARA document referenced with version.' }

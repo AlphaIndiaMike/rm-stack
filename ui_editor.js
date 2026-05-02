@@ -200,9 +200,16 @@ class EditorView {
             const row = document.createElement('div');
             row.className = 'checklist-item';
             const checked = state[item.id] ? 'checked' : '';
+            // Optional `help` text (added in outline.js for items where the
+            // user asked for clarification — e.g. HARA, item-def doc ref).
+            // Renders as a `?` icon next to the label; the custom tooltip
+            // layer reveals the explanation on hover.
+            const helpIcon = item.help
+                ? ` <span class="help-icon" title="${item.help.replace(/"/g, '&quot;')}">?</span>`
+                : '';
             row.innerHTML = `
                 <input type="checkbox" id="chk-${item.id}" ${checked}>
-                <label for="chk-${item.id}">${item.text}</label>
+                <label for="chk-${item.id}">${item.text}${helpIcon}</label>
             `;
             row.querySelector('input').addEventListener('change', (e) => {
                 if (!this.doc.checklistState[this.currentChapter.id]) {
@@ -300,6 +307,18 @@ class EditorView {
             row.className = 'declaration-row';
             row.style.gridTemplateColumns = config.gridCols;
             row.innerHTML = config.renderRow(item);
+
+            // Optional post-render hook — used by configs that need to
+            // mount real widgets (multi-select dropdowns, etc.) into
+            // placeholder nodes inside renderRow's HTML. The third arg
+            // is the document; the fourth is a refresh callback the
+            // widget can call to trigger a full re-render once it's
+            // safe to do so (typically on popover close, never during
+            // an open in-flight selection — same anti-flicker reason
+            // text inputs no longer re-render on input).
+            if (typeof config.postRender === 'function') {
+                config.postRender(row, item, this.doc, () => this.onChange());
+            }
 
             row.querySelector('.del-btn').addEventListener('click', () => {
                 config.remove(this.doc, item.id);
@@ -549,7 +568,13 @@ class EditorView {
             this.draftReq.asil,
             v => { this.draftReq.asil = v; this._refreshPreview(wrap); }));
         panel.appendChild(this._makeSelectSlot('Parent Safety Goal',
-            [{value:'',label:'None'}, ...this.doc.safetyGoals.map(g => ({value: g.id, label: `${g.id} (${g.asil})`}))],
+            // Display by name with the integrity level in parens, falling
+            // back to the ID when the SG has no name yet. The stored value
+            // is still the SG ID so renaming the SG never breaks the link.
+            [{value:'',label:'None'}, ...this.doc.safetyGoals.map(g => ({
+                value: g.id,
+                label: `${g.name || g.id} (${g.asil || 'QM'})`
+            }))],
             this.draftReq.parentSG,
             v => { this.draftReq.parentSG = v; this._refreshPreview(wrap); }));
         panel.appendChild(this._makeInputSlot('FTTI', this.draftReq.ftti,
@@ -652,14 +677,18 @@ class EditorView {
             else if (warnings.length > 0) statusDot = '<span class="completeness-dot orange" title="Has warnings"></span>';
             else statusDot = '<span class="completeness-dot green" title="Valid"></span>';
 
-            const asilClass = req.asil ? `asil-${req.asil.toLowerCase()}` : '';
+            const asilClass = GRAMMAR.asilCssClass(req.asil);
 
             const asilTitles = {
-                'QM': 'Quality Management — no integrity requirement beyond standard QM.',
-                'A':  'ASIL A — lowest safety integrity. Failure could cause light/moderate injury.',
-                'B':  'ASIL B — moderate integrity.',
-                'C':  'ASIL C — high integrity.',
-                'D':  'ASIL D — highest integrity. Failure could be life-threatening.'
+                'QM':     'Quality Management — no safety integrity beyond standard QM.',
+                'ASIL-A': 'ASIL A — lowest safety integrity (ISO 26262). Failure could cause light/moderate injury.',
+                'ASIL-B': 'ASIL B — moderate integrity (ISO 26262).',
+                'ASIL-C': 'ASIL C — high integrity (ISO 26262).',
+                'ASIL-D': 'ASIL D — highest integrity (ISO 26262). Failure could be life-threatening.',
+                'SIL-1':  'SIL 1 — lowest integrity (IEC 61508).',
+                'SIL-2':  'SIL 2 — moderate integrity (IEC 61508).',
+                'SIL-3':  'SIL 3 — high integrity (IEC 61508).',
+                'SIL-4':  'SIL 4 — highest integrity (IEC 61508).'
             };
 
             item.innerHTML = `
@@ -669,7 +698,7 @@ class EditorView {
                 </div>
                 <div>${req.statement}</div>
                 <div class="req-badges">
-                    ${req.asil ? `<span class="req-badge ${asilClass}" title="${(asilTitles[req.asil] || 'Safety integrity level').replace(/"/g,'&quot;')}">ASIL ${req.asil}</span>` : ''}
+                    ${req.asil ? `<span class="req-badge ${asilClass}" title="${(asilTitles[req.asil] || 'Safety integrity level').replace(/"/g,'&quot;')}">${req.asil}</span>` : ''}
                     ${req.verification ? `<span class="req-badge" title="Verification method assigned to this requirement.">Verif: ${req.verification}</span>` : ''}
                     ${req.parentSG ? `<span class="req-badge" title="Parent Safety Goal — this requirement contributes to satisfying it.">→ ${this.doc.nameForId(req.parentSG)}</span>` : ''}
                     ${req.ftti ? `<span class="req-badge" title="Fault Tolerant Time Interval contribution from this requirement.">FTTI ${req.ftti}</span>` : ''}
@@ -788,11 +817,12 @@ const DECLARATION_CONFIG = {
         // Tooltip text shown on header `?` icons. Helps the user understand
         // what each column wants without bloating the UI.
         helpHeaders: {
-            'Name':        'Short, stable label. Stays the same across the project.',
-            'Description': 'What this function does for the end-user. One sentence, observable behaviour, no implementation detail.'
+            'Name':            'Short, stable label. Stays the same across the project.',
+            'Description':     'What this function does for the end-user. One sentence, observable behaviour, no implementation detail.',
+            'Active in modes': 'Multi-select. Operating modes in which this function is active. Editing here is the same data as the "Active functions" column on the Operating Modes table — they are two views of the same many-to-many mapping.'
         },
-        headers: ['ID', 'Name', 'Description', '', ''],
-        gridCols: '90px 1fr 1fr 80px 40px',
+        headers: ['ID', 'Name', 'Description', 'Active in modes', ''],
+        gridCols: '90px 1fr 1fr 200px 40px',
         getList: doc => doc.itemFunctions,
         add: doc => {
             const f = new ItemFunction(); // empty defaults — placeholder only
@@ -803,30 +833,55 @@ const DECLARATION_CONFIG = {
         updateFromRow: (doc, id, row) => {
             const item = doc.itemFunctions.find(x => x.id === id);
             if (!item) return;
-            const inputs = row.querySelectorAll('input');
+            const inputs = row.querySelectorAll('input[type="text"]');
             item.name = inputs[0].value;
             item.description = inputs[1].value;
+            // activeModes is written by the multi-select widget, not from
+            // input scraping. Same pattern as safeState below.
         },
         renderRow: item => `
             <div class="req-id" style="align-self:center;" title="Internal stable ID. References use this; UI shows the name.">${item.id}</div>
             <input type="text" value="${(item.name || '').replace(/"/g,'&quot;')}" placeholder="e.g. Adaptive Cruise Control">
             <input type="text" value="${(item.description || '').replace(/"/g,'&quot;')}" placeholder="What does this function do for the end-user?">
-            <div></div>
+            <span class="ms-mount" data-ms="active-modes"></span>
             <button class="del-btn req-delete" title="Delete this item function">✕</button>
-        `
+        `,
+        // Mounts the Active-in-modes picker. Storage canonicalises here:
+        // ItemFunction.activeModes = [mode IDs]. The picker on the Mode
+        // side reads this back via inverse lookup, so any change here is
+        // reflected there on next render and vice versa.
+        postRender: (row, item, doc, refresh) => {
+            const mount = row.querySelector('.ms-mount[data-ms="active-modes"]');
+            if (!mount) return;
+            const modeOpts = doc.modes.map(m => ({
+                value: m.id,
+                label: m.name || `(unnamed ${m.id})`
+            }));
+            const ms = new MultiSelectDropdown(
+                modeOpts, item.activeModes || [],
+                (newRefs) => { item.activeModes = newRefs; },
+                { unitLabel: 'mode',
+                  emptyLabel: 'No operating modes declared yet — add them in the Operating Modes table.',
+                  onClose: refresh });
+            mount.replaceWith(ms.element);
+        }
     },
     mode: {
         title: 'Operating Modes',
         singular: 'Mode',
         helpHeaders: {
-            'Name':        'Short ID-style name for the mode (e.g. "Nominal", "Degraded", "Safe").',
-            'Description': 'What is true while the system is in this mode? Behaviour, constraints, observable state.',
-            'Safe state?': 'Tick if this mode is a designated safe state per the system-level safe-state model. Safety Goals will reference these.'
+            'Name':             'Short ID-style name for the mode (e.g. "Nominal", "Degraded", "Safe").',
+            'Description':      'What is true while the system is in this mode? Behaviour, constraints, observable state.',
+            'Active functions': 'Multi-select. Item functions that are active when the system is in this mode. Click to expand the picker. Editing here is the same data as the "Active in modes" column on the Item Functions table.',
+            'Safe state?':      'Tick if this mode is a designated safe state per the system-level safe-state model. Safety Goals will reference these. Independent of the formal Safe States list — the boolean is a quick marker, the SafeState entity is the formal model with triggers and SG links.'
         },
         // Header was "Safe?" — too cryptic. "Safe state?" matches the
         // ISO 26262 vocabulary the user is actually trying to capture.
-        headers: ['ID', 'Name', 'Description', 'Safe state?', ''],
-        gridCols: '90px 1fr 1fr 100px 40px',
+        // The new "Active functions" column is the primary edit point
+        // for the mode↔function many-to-many; the Item Function table
+        // mirrors the inverse view.
+        headers: ['ID', 'Name', 'Description', 'Active functions', 'Safe state?', ''],
+        gridCols: '90px 1fr 1fr 200px 100px 40px',
         getList: doc => doc.modes,
         add: doc => {
             const m = new Mode();
@@ -837,18 +892,43 @@ const DECLARATION_CONFIG = {
         updateFromRow: (doc, id, row) => {
             const item = doc.modes.find(x => x.id === id);
             if (!item) return;
-            const inputs = row.querySelectorAll('input');
-            item.name = inputs[0].value;
-            item.description = inputs[1].value;
-            item.isSafeState = inputs[2].checked;
+            const textInputs = row.querySelectorAll('input[type="text"]');
+            item.name = textInputs[0].value;
+            item.description = textInputs[1].value;
+            const cb = row.querySelector('input[type="checkbox"]');
+            if (cb) item.isSafeState = cb.checked;
+            // active-functions is written via the multi-select onChange,
+            // which updates each ItemFunction.activeModes (the canonical
+            // store). Not scraped from the row here.
         },
         renderRow: item => `
             <div class="req-id" style="align-self:center;" title="Internal stable ID.">${item.id}</div>
             <input type="text" value="${(item.name||'').replace(/"/g,'&quot;')}" placeholder="e.g. Nominal, Degraded, Safe">
             <input type="text" value="${(item.description||'').replace(/"/g,'&quot;')}" placeholder="What is true while in this mode?">
+            <span class="ms-mount" data-ms="active-functions"></span>
             <input type="checkbox" ${item.isSafeState ? 'checked' : ''} style="justify-self:center;" title="Designated safe state — Safety Goals can reference this mode.">
             <button class="del-btn req-delete" title="Delete this mode">✕</button>
-        `
+        `,
+        // Mounts the Active-functions picker. Storage canonicalises on
+        // ItemFunction.activeModes (see SyrsDocument helpers). Both this
+        // picker and the inverse one on the Item Function row go through
+        // the same setter so the data stays consistent.
+        postRender: (row, item, doc, refresh) => {
+            const mount = row.querySelector('.ms-mount[data-ms="active-functions"]');
+            if (!mount) return;
+            const fnOpts = doc.itemFunctions.map(f => ({
+                value: f.id,
+                label: f.name || `(unnamed ${f.id})`
+            }));
+            const selected = doc.activeFunctionsForMode(item.id);
+            const ms = new MultiSelectDropdown(
+                fnOpts, selected,
+                (newRefs) => doc.setActiveFunctionsForMode(item.id, newRefs),
+                { unitLabel: 'function',
+                  emptyLabel: 'No item functions declared yet — add them in the Item Functions table above.',
+                  onClose: refresh });
+            mount.replaceWith(ms.element);
+        }
     },
     assumption: {
         title: 'Assumptions of Use',
@@ -919,6 +999,79 @@ const DECLARATION_CONFIG = {
             <button class="del-btn req-delete" title="Delete this Safety Goal">✕</button>
         `
     },
+    safeState: {
+        title: 'Safe States',
+        sectionHelp: 'A named safe condition (per ISO 26262 Part 1 / IEC 61508-4). Each safe state binds upward to one or more Safety Goals it satisfies, and downward to one or more Operating Modes that realize it. This list closes the c3d checklist (safe states cross-referenced to mode/state model).',
+        singular: 'Safe State',
+        helpHeaders: {
+            'Description':  'Prose description — what is true while the system is in this safe state.',
+            'Triggers':     'Conditions that demand the system enter this safe state (e.g. "Brake actuator failure", "Loss of valid lateral control input").',
+            'Modes':        'Multi-select. Pick the declared Operating Mode(s) that realize this safe state. Click the row to expand the picker.',
+            'Safety Goals': 'Multi-select. Pick the Safety Goal(s) that reference this safe state as their fault-reaction target.'
+        },
+        headers: ['ID', 'Description', 'Triggers', 'Modes', 'Safety Goals', ''],
+        gridCols: '90px 1fr 1fr 200px 200px 40px',
+        getList: doc => doc.safeStates,
+        add: doc => {
+            const ss = new SafeState();
+            ss.id = doc.nextId('safeState');
+            doc.safeStates.push(ss);
+        },
+        remove: (doc, id) => { doc.safeStates = doc.safeStates.filter(x => x.id !== id); },
+        updateFromRow: (doc, id, row) => {
+            const item = doc.safeStates.find(x => x.id === id);
+            if (!item) return;
+            const inputs = row.querySelectorAll('input[type="text"]');
+            item.description = inputs[0].value;
+            item.triggers    = inputs[1].value;
+            // modeRefs / sgRefs are written by the multi-select widgets'
+            // onChange callbacks, not from input scraping.
+        },
+        renderRow: item => `
+            <div class="req-id" style="align-self:center;" title="Internal stable ID.">${item.id}</div>
+            <input type="text" value="${(item.description||'').replace(/"/g,'&quot;')}" placeholder="Description (what is true here)">
+            <input type="text" value="${(item.triggers||'').replace(/"/g,'&quot;')}" placeholder="Trigger conditions">
+            <span class="ms-mount" data-ms="modes"></span>
+            <span class="ms-mount" data-ms="sgs"></span>
+            <button class="del-btn req-delete" title="Delete this safe state">✕</button>
+        `,
+        // Mount the two MultiSelectDropdowns into the placeholder spans.
+        // The widgets write directly to item.modeRefs / item.sgRefs;
+        // a full re-render is fired on popover close so the right-pane
+        // summary picks up the change. The text inputs above stay live
+        // and don't need a re-render (Phase 1 click-twice fix).
+        postRender: (row, item, doc, refresh) => {
+            const modesMount = row.querySelector('.ms-mount[data-ms="modes"]');
+            if (modesMount) {
+                const modeOpts = doc.modes.map(m => ({
+                    value: m.id,
+                    label: m.name || `(unnamed ${m.id})`
+                }));
+                const ms = new MultiSelectDropdown(
+                    modeOpts, item.modeRefs,
+                    (newRefs) => { item.modeRefs = newRefs; },
+                    { unitLabel: 'mode',
+                      emptyLabel: 'No operating modes declared yet — add them in the Operating Modes table above.',
+                      onClose: refresh });
+                modesMount.replaceWith(ms.element);
+            }
+            const sgMount = row.querySelector('.ms-mount[data-ms="sgs"]');
+            if (sgMount) {
+                const sgOpts = doc.safetyGoals.map(g => ({
+                    value: g.id,
+                    label: `${g.name || g.id} (${g.asil || 'QM'})`
+                }));
+                const ms = new MultiSelectDropdown(
+                    sgOpts, item.sgRefs,
+                    (newRefs) => { item.sgRefs = newRefs; },
+                    { unitLabel: 'safety goal',
+                      emptyLabel: 'No Safety Goals declared yet — add them in the Safety Goals table above.',
+                      onClose: refresh });
+                sgMount.replaceWith(ms.element);
+            }
+        }
+    },
+
     element: {
         title: 'System Elements',
         singular: 'Element',

@@ -63,7 +63,7 @@ class SummaryView {
         const cov = validator.elementCoverage();
         const tip = 'System elements declared in Chapter 6. Badge shows how many element requirements (Chapter 7) trace to each.';
         return this._makeList('Elements', cov.length, cov.map(e => ({
-            text: `${e.name || '(unnamed)'} <small style="color:#999;" title="Inherited or decomposed ASIL">${e.asil}</small>`,
+            text: `${e.name || '(unnamed)'} <small style="color:#999;" title="Inherited or decomposed integrity level">(${e.asil || 'QM'})</small>`,
             badge: `${e.reqCount} req`,
             badgeTitle: e.empty
                 ? 'No element requirements yet — Chapter 7 leaf is empty.'
@@ -93,7 +93,11 @@ class SummaryView {
         const cov = validator.safetyGoalCoverage();
         const tip = 'Safety Goals declared in Chapter 3. End-to-end "complete" means an FSR (Ch 4), an acceptance requirement (Ch 5), and at least one element requirement (Ch 7) all trace to the SG.';
         return this._makeList('Safety Goals', cov.length, cov.map(s => ({
-            text: `${s.name || s.id} <small style="color:#999;" title="ASIL or SIL level">${s.asil}</small>`,
+            // Display the integrity level in parentheses after the name,
+            // e.g. "Avoid unintended deceleration (ASIL-B)" or "(SIL-2)".
+            // Empty string falls back to (QM) so the user can read the
+            // label without inspecting the column.
+            text: `${s.name || s.id} <small style="color:#666;" title="Integrity level — ISO 26262 ASIL or IEC 61508 SIL">(${s.asil || 'QM'})</small>`,
             badge: s.complete ? '✓' : '⚠',
             badgeTitle: s.complete
                 ? 'End-to-end traceable: FSR ✓, acceptance ✓, element ✓.'

@@ -144,8 +144,39 @@ const GRAMMAR = {
         { word: 'as required',  reason: 'Not specified. Give a condition.' }
     ],
 
-    // ASIL levels
-    asilLevels: ['QM', 'A', 'B', 'C', 'D'],
+    // Integrity levels.
+    //
+    // ISO 26262 (automotive) and IEC 61508 (general functional safety) use
+    // independent classifications and are NOT mathematically equivalent.
+    // We therefore expose them as parallel options in one dropdown rather
+    // than mapping one to the other. QM is shared.
+    //
+    // Legacy projects authored before this widening used single-letter
+    // values ('A'..'D'). They are migrated to the prefixed form on load
+    // (see migrateAsilValue in model_base.js).
+    asilLevels: ['QM',
+                 'ASIL-A', 'ASIL-B', 'ASIL-C', 'ASIL-D',
+                 'SIL-1',  'SIL-2',  'SIL-3',  'SIL-4'],
+
+    /**
+     * Map a stored level value to a CSS modifier class for the badge.
+     * QM         → asil-qm     ASIL-A..D → asil-a..d     SIL-1..4 → sil-1..4
+     * Empty/unknown → '' (no modifier — base badge styling).
+     */
+    asilCssClass: function(val) {
+        if (!val) return '';
+        if (val === 'QM') return 'asil-qm';
+        if (/^ASIL-[A-D]$/.test(val)) return 'asil-' + val.slice(5).toLowerCase();
+        if (/^SIL-[1-4]$/.test(val))  return 'sil-'  + val.slice(4);
+        return '';
+    },
+
+    /**
+     * "High integrity" set used by validation rules that flag inspection-only
+     * verification, mandate DC targets on safety mechanisms, etc. Both
+     * frameworks' top two tiers are in here.
+     */
+    highIntegrityLevels: ['ASIL-C', 'ASIL-D', 'SIL-3', 'SIL-4'],
 
     // Verification methods
     verificationMethods: [
@@ -309,9 +340,11 @@ class GrammarValidator {
             warnings.push('Prohibition requirements should not be verified by test alone. Add analysis.');
         }
 
-        // 11. ASIL C/D + inspection-only verification is flagged
-        if ((req.asil === 'C' || req.asil === 'D') && req.verification === 'inspection') {
-            warnings.push(`ASIL ${req.asil} with inspection-only verification requires justification.`);
+        // 11. High-integrity (ASIL C/D or SIL 3/4) + inspection-only
+        //     verification is flagged. Both frameworks treat their top
+        //     tiers the same way for this purpose.
+        if (GRAMMAR.highIntegrityLevels.includes(req.asil) && req.verification === 'inspection') {
+            warnings.push(`${req.asil} with inspection-only verification requires justification.`);
         }
 
         // 12. Source required

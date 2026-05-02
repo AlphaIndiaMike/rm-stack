@@ -43,12 +43,22 @@ class Persistence {
     static migrate(data) {
         // Forward migrations live here as new schema versions ship.
         // The SyrsDocument constructor is defensive about missing fields
-        // (idCounters, lexicon) and seeds counters from existing IDs, so
-        // v1→v2 is a transparent bump. Future versions chain below.
+        // (idCounters, lexicon, safeStates) and seeds counters from
+        // existing IDs, so each step below is mostly a tag bump — the
+        // real work happens defensively in the constructors.
         if (!data.schemaVersion) data.schemaVersion = 1;
         if (data.schemaVersion === 1) {
+            // v1 → v2: idCounters and lexicon introduced. Filled in by
+            // the SyrsDocument constructor (counter seeded from existing
+            // IDs, lexicon defaulted to empty arrays per category).
             data.schemaVersion = 2;
-            // idCounters and lexicon are filled in by the constructor.
+        }
+        if (data.schemaVersion === 2) {
+            // v2 → v3: SIL/ASIL widening + SafeState collection.
+            // - asil values 'A'..'D' are migrated to 'ASIL-A'..'ASIL-D'
+            //   inside each model class's constructor (migrateAsilValue).
+            // - data.safeStates defaults to [] when absent.
+            data.schemaVersion = 3;
         }
         return data;
     }

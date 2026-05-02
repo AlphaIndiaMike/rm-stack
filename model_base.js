@@ -33,9 +33,22 @@ const ID_PREFIX = {
     modeTransition: 'TR',
     assumption:     'AOU',
     safetyGoal:     'SG',
+    safeState:      'SS',
     element:        'ELEM',
     interfaceSpec:  'IF'
 };
+
+/**
+ * Migrate a legacy single-letter ASIL value to the prefixed form
+ * introduced when SIL support landed. 'A'..'D' → 'ASIL-A'..'ASIL-D'.
+ * 'QM' and already-prefixed values pass through unchanged. Empty/null
+ * stay empty/null. Idempotent so it can run on every load.
+ */
+function migrateAsilValue(val) {
+    if (!val) return val;
+    if (/^[A-D]$/.test(val)) return 'ASIL-' + val;
+    return val;
+}
 
 class Requirement {
     constructor(data) {
@@ -76,7 +89,7 @@ class Requirement {
         this.allocation    = data.allocation || [];
         this.verification  = data.verification || '';
         this.passCriterion = data.passCriterion || '';
-        this.asil          = data.asil || '';
+        this.asil          = migrateAsilValue(data.asil || '');
         this.parentSG      = data.parentSG || '';
         this.ftti          = data.ftti || '';
         this.safeStateRef  = data.safeStateRef || '';
@@ -116,7 +129,7 @@ class Element {
         this.id        = data.id || Element.generateId();
         this.name      = data.name || '';
         this.purpose   = data.purpose || '';
-        this.asil      = data.asil || 'QM';
+        this.asil      = migrateAsilValue(data.asil || 'QM');
         this.allocatedItemFunctions = data.allocatedItemFunctions || [];
     }
     static generateId() { return 'ELEM-' + Math.random().toString(36).substr(2, 5).toUpperCase(); }
@@ -143,12 +156,48 @@ class SafetyGoal {
         this.id        = data.id || SafetyGoal.generateId();
         this.name      = data.name || '';
         this.hazardRef = data.hazardRef || '';
-        this.asil      = data.asil || 'QM';
+        this.asil      = migrateAsilValue(data.asil || 'QM');
+        // safeStates: array of SafeState IDs (SS-xxxx) that realize this
+        // goal's safe-state condition. Legacy projects stored free text
+        // here — that text is preserved by the caller (UI legacy block)
+        // for one release, then dropped.
         this.safeStates = data.safeStates || [];
         this.ftti      = data.ftti || '';
         this.emergencyInterval = data.emergencyInterval || '';
     }
     static generateId() { return 'SG-' + Math.random().toString(36).substr(2, 4).toUpperCase(); }
+    toJSON() { return Object.assign({}, this); }
+}
+
+
+/**
+ * SafeState — a named safe condition the system can be brought into.
+ *
+ * Sits *between* Safety Goals and Operating Modes in the conceptual
+ * model: an SG references one or more SafeStates as its acceptable
+ * fault-reaction targets, and each SafeState is realized by one or
+ * more declared Modes (so the user can read the mode/state model
+ * without leaving Chapter 3 — closes ISO 26262 Part 3 clause 7
+ * "safe states cross-referenced to mode/state model").
+ *
+ *   description : prose — what is true while the system is here
+ *   triggers    : the conditions that demand entry to this state
+ *   modeRefs    : array of Mode IDs that realize this safe state
+ *   sgRefs      : array of SG IDs that reference this safe state
+ *
+ * Bidirectional references are stored canonically here (mode-side and
+ * SG-side mirror this on read). Editing from either end ends up here.
+ */
+class SafeState {
+    constructor(data) {
+        data = data || {};
+        this.id          = data.id || SafeState.generateId();
+        this.description = data.description || '';
+        this.triggers    = data.triggers || '';
+        this.modeRefs    = data.modeRefs || [];
+        this.sgRefs      = data.sgRefs || [];
+    }
+    static generateId() { return 'SS-' + Math.random().toString(36).substr(2, 4).toUpperCase(); }
     toJSON() { return Object.assign({}, this); }
 }
 
@@ -205,7 +254,7 @@ class Assumption {
 class SyrsDocument {
     constructor(data) {
         data = data || {};
-        this.schemaVersion = 2;
+        this.schemaVersion = 3;
         this.discipline    = data.discipline || 'system';
         this.docClass      = data.docClass || 'complex';
         this.title         = data.title || 'Untitled System Requirements Specification';
@@ -213,6 +262,7 @@ class SyrsDocument {
         this.elements      = (data.elements || []).map(e => new Element(e));
         this.itemFunctions = (data.itemFunctions || []).map(f => new ItemFunction(f));
         this.safetyGoals   = (data.safetyGoals || []).map(g => new SafetyGoal(g));
+        this.safeStates    = (data.safeStates || []).map(s => new SafeState(s));
         this.modes         = (data.modes || []).map(m => new Mode(m));
         this.interfaces    = (data.interfaces || []).map(i => new InterfaceSpec(i));
         this.assumptions   = (data.assumptions || []).map(a => new Assumption(a));
@@ -253,6 +303,7 @@ class SyrsDocument {
             ['mode',           this.modes],
             ['assumption',     this.assumptions],
             ['safetyGoal',     this.safetyGoals],
+            ['safeState',      this.safeStates],
             ['element',        this.elements],
             ['interfaceSpec',  this.interfaces]
         ];
@@ -291,12 +342,14 @@ class SyrsDocument {
         if (!id) return '';
         const all = [
             ...this.itemFunctions, ...this.elements, ...this.safetyGoals,
+            ...this.safeStates,
             ...this.modes, ...this.interfaces, ...this.assumptions,
             ...this.requirements
         ];
         const hit = all.find(x => x && x.id === id);
         if (!hit) return id; // dangling — show ID so user can debug
-        return hit.name || hit.text || id;
+        // SafeState has no `name`; its description is the user-facing label.
+        return hit.name || hit.text || hit.description || id;
     }
 
     /**
@@ -311,6 +364,44 @@ class SyrsDocument {
         if (!this.lexicon[category].includes(v)) this.lexicon[category].push(v);
     }
 
+    /**
+     * Mode ↔ Function helpers.
+     *
+     * The canonical store is `ItemFunction.activeModes` — a per-function
+     * array of mode IDs that activate the function. The UI lets the user
+     * edit this from either side (mode row picks functions, function row
+     * picks modes); both sides go through these helpers so the storage
+     * stays consistent and the diff logic lives in one place.
+     */
+
+    /** Functions whose activeModes contains modeId. */
+    activeFunctionsForMode(modeId) {
+        if (!modeId) return [];
+        return this.itemFunctions
+            .filter(f => (f.activeModes || []).includes(modeId))
+            .map(f => f.id);
+    }
+
+    /**
+     * Set the active-functions list for a given mode. Diffs the new list
+     * against each function's current activeModes and adds/removes the
+     * modeId only where it changes — never touches functions outside the
+     * picker's option set.
+     */
+    setActiveFunctionsForMode(modeId, functionIds) {
+        if (!modeId) return;
+        const newSet = new Set(functionIds || []);
+        this.itemFunctions.forEach(f => {
+            const isNow = newSet.has(f.id);
+            const has   = (f.activeModes || []).includes(modeId);
+            if (isNow && !has) {
+                f.activeModes = [...(f.activeModes || []), modeId];
+            } else if (!isNow && has) {
+                f.activeModes = (f.activeModes || []).filter(m => m !== modeId);
+            }
+        });
+    }
+
     toJSON() {
         return {
             schemaVersion: this.schemaVersion,
@@ -321,6 +412,7 @@ class SyrsDocument {
             elements: this.elements.map(e => e.toJSON()),
             itemFunctions: this.itemFunctions.map(f => f.toJSON()),
             safetyGoals: this.safetyGoals.map(g => g.toJSON()),
+            safeStates: this.safeStates.map(s => s.toJSON()),
             modes: this.modes.map(m => m.toJSON()),
             interfaces: this.interfaces.map(i => i.toJSON()),
             assumptions: this.assumptions.map(a => a.toJSON()),
