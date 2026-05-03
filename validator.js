@@ -201,4 +201,85 @@ class DocumentValidator {
         });
         return issues;
     }
+
+    /**
+     * Forgotten transitions in the mode graph. Flags:
+     *   - modes with no outbound transitions (terminal but not a safe state)
+     *   - modes with no inbound transitions (unreachable)
+     *   - safe states with no transition into any of their realizing modes
+     */
+    forgottenTransitions() {
+        const issues = [];
+        const modes = this.doc.modes || [];
+        const trans = this.doc.modeTransitions || [];
+        modes.forEach(m => {
+            const outbound = trans.filter(t => t.fromMode === m.id).length;
+            const inbound  = trans.filter(t => t.toMode   === m.id).length;
+            if (outbound === 0 && !m.isSafeState) {
+                issues.push({ kind: 'no-outbound', modeId: m.id,
+                    text: `Mode "${m.name || m.id}" has no outbound transitions.` });
+            }
+            if (inbound === 0) {
+                issues.push({ kind: 'unreachable', modeId: m.id,
+                    text: `Mode "${m.name || m.id}" has no inbound transitions — unreachable.` });
+            }
+        });
+        (this.doc.safeStates || []).forEach(ss => {
+            const refs = ss.modeRefs || [];
+            if (refs.length === 0) return; // separate checklist concern
+            const reachable = refs.some(modeId =>
+                trans.some(t => t.toMode === modeId));
+            if (!reachable) {
+                issues.push({ kind: 'safe-state-unreachable', ssId: ss.id,
+                    text: `Safe state "${ss.description || ss.id}" has no transition into any of its realizing modes.` });
+            }
+        });
+        return issues;
+    }
+
+    /**
+     * Timing crosscheck. Every transition INTO a mode that realizes a
+     * safe state must complete within the FTTI of any Safety Goal that
+     * references that safe state. Returns a list of issues where the
+     * transition time exceeds the SG's FTTI (or where one side is
+     * unparseable, which is a less severe warning).
+     *
+     * Both transitionTime and ftti are run through Timing.parseMs so
+     * "1 s" / "1000 ms" / "1000" all compare correctly.
+     */
+    timingCrosscheck() {
+        const issues = [];
+        const safeStates = this.doc.safeStates || [];
+        const sgs        = this.doc.safetyGoals || [];
+        const trans      = this.doc.modeTransitions || [];
+
+        safeStates.forEach(ss => {
+            const guardingSGs = sgs.filter(sg =>
+                (sg.safeStates || []).includes(ss.id) ||
+                (ss.sgRefs || []).includes(sg.id)
+            );
+            if (guardingSGs.length === 0) return;
+            const tightestFttiMs = guardingSGs
+                .map(sg => Timing.parseMs(sg.ftti))
+                .filter(v => typeof v === 'number' && !isNaN(v))
+                .reduce((a, b) => Math.min(a, b), Infinity);
+            if (!isFinite(tightestFttiMs)) return;
+            (ss.modeRefs || []).forEach(modeId => {
+                trans.filter(t => t.toMode === modeId).forEach(t => {
+                    const ttMs = Timing.parseMs(t.transitionTime);
+                    if (ttMs == null) {
+                        issues.push({ kind: 'ttime-missing', tId: t.id,
+                            text: `Transition ${t.id} into safe-state mode has no transition time; FTTI ${Timing.formatMs(tightestFttiMs)} cannot be checked.` });
+                    } else if (isNaN(ttMs)) {
+                        issues.push({ kind: 'ttime-unparseable', tId: t.id,
+                            text: `Transition ${t.id}: time "${t.transitionTime}" not parseable as a duration.` });
+                    } else if (ttMs > tightestFttiMs) {
+                        issues.push({ kind: 'ttime-over-ftti', tId: t.id,
+                            text: `Transition ${t.id} takes ${Timing.formatMs(ttMs)} but FTTI for safe state "${ss.description || ss.id}" is ${Timing.formatMs(tightestFttiMs)}.` });
+                    }
+                });
+            });
+        });
+        return issues;
+    }
 }

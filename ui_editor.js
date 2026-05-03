@@ -206,6 +206,24 @@ class EditorView {
             container.appendChild(this._renderHsiDiagnostic());
         }
 
+        // Chapter 5 (System Breakdown) gets three extra widgets — model
+        // diagnostics, an interactive simulator, and a one-click EARS
+        // generator that drops drafts into Chapter 4. State for the
+        // simulator and generator lives on `this` so it survives
+        // re-renders triggered by unrelated edits.
+        if (this.currentChapter.id === 'ch06_breakdown') {
+            if (!this._modeDiagnostics) this._modeDiagnostics = new ModeDiagnosticsView(this.doc);
+            else this._modeDiagnostics.setDocument(this.doc);
+            if (!this._modeSimulator)   this._modeSimulator   = new ModeSimulatorView(this.doc);
+            else this._modeSimulator.setDocument(this.doc);
+            if (!this._modeGenerator)   this._modeGenerator   = new ModeRequirementGenerator(this.doc, this.onChange);
+            else this._modeGenerator.setDocument(this.doc);
+
+            this._modeDiagnostics.render(container);
+            this._modeSimulator.render(container);
+            this._modeGenerator.render(container);
+        }
+
         // Checklist
         container.appendChild(this._renderChecklist());
 
@@ -565,14 +583,25 @@ class EditorView {
                 this.onChange();
             });
 
-            // Text inputs: live write on `input`, no re-render.
-            // Avoids the click-twice bug entirely — the user can mouse
-            // straight from a half-typed input onto "+ Add" and the
-            // first click registers because no DOM teardown happens
-            // mid-flight.
-            row.querySelectorAll('input[type="text"]').forEach(inp => {
+            // Text inputs and number inputs: live write on `input`, no
+            // re-render. Avoids the click-twice bug entirely — the user
+            // can mouse straight from a half-typed input onto "+ Add"
+            // and the first click registers because no DOM teardown
+            // happens mid-flight.
+            row.querySelectorAll('input[type="text"], input[type="number"]').forEach(inp => {
                 inp.addEventListener('input', () => {
                     config.updateFromRow(this.doc, item.id, row);
+                });
+                // `change` fires on blur or Enter — that's the commit
+                // moment. Configs that want to bank the just-typed value
+                // into the lexicon (owners, producers, triggers, ...)
+                // do it here, NEVER from `input`. Anything heavier than
+                // a model write goes in commitFromRow so single
+                // keystrokes stay fast.
+                inp.addEventListener('change', () => {
+                    if (typeof config.commitFromRow === 'function') {
+                        config.commitFromRow(this.doc, item.id, row);
+                    }
                 });
             });
 
@@ -582,6 +611,9 @@ class EditorView {
             row.querySelectorAll('select, input[type="checkbox"]').forEach(inp => {
                 inp.addEventListener('change', () => {
                     config.updateFromRow(this.doc, item.id, row);
+                    if (typeof config.commitFromRow === 'function') {
+                        config.commitFromRow(this.doc, item.id, row);
+                    }
                     this.onChange();
                 });
             });
@@ -657,6 +689,15 @@ class EditorView {
         ];
         wrap.appendChild(mkList('lex-producers', producers));
         wrap.appendChild(mkList('lex-consumers', consumers));
+
+        // Trigger autocomplete — sourced from any trigger ever banked
+        // plus what's currently sitting on declared mode transitions.
+        // The simulator's trigger picker uses the same union.
+        const triggers = [
+            ...((this.doc.modeTransitions || []).map(t => t.trigger).filter(Boolean)),
+            ...((this.doc.lexicon && this.doc.lexicon.triggers) || [])
+        ];
+        wrap.appendChild(mkList('lex-triggers', triggers));
 
         return wrap;
     }
@@ -1574,8 +1615,13 @@ const DECLARATION_CONFIG = {
             item.text = inputs[0].value;
             item.owner = inputs[1].value;
             item.status = inputs[2].value;
-            // Bank the owner so future rows autocomplete to it.
-            doc.addToLexicon('owners', item.owner);
+        },
+        // Lexicon write happens at commit (blur / Enter / select change),
+        // not on every keystroke. See _renderDeclarationTable's `change`
+        // event wiring.
+        commitFromRow: (doc, id) => {
+            const item = doc.assumptions.find(x => x.id === id);
+            if (item) doc.addToLexicon('owners', item.owner);
         },
         // The `list="owners-datalist"` attribute hooks the input to the
         // shared datalist rendered once per chapter (see _renderOwnerDatalist).
@@ -1699,11 +1745,15 @@ const DECLARATION_CONFIG = {
         helpHeaders: {
             'Name':    'Stable element identifier, no spaces (e.g. SteeringECU). The user-facing display name.',
             'Purpose': 'One-sentence statement of why the element exists in the architecture.',
+            'Parent':  'Optional. Parent element in the system breakdown. Self and descendants are excluded from the dropdown to prevent cycles.',
+            'Qty':     'Number of identical instances of this element (e.g. 4 wheel-speed sensors). Right-pane Elements count sums these.',
             'ASIL':    'Inherited or decomposed ASIL. Phase 2 widens this to SIL+ASIL.'
         },
-        headers: ['ID', 'Name', 'Purpose', 'ASIL', ''],
-        gridCols: '90px 1fr 1fr 80px 40px',
-        getList: doc => doc.elements,
+        headers: ['ID', 'Name', 'Purpose', 'Parent', 'Qty', 'ASIL', ''],
+        gridCols: '90px 1fr 1fr 160px 60px 80px 40px',
+        // Tree-ordered list with transient _depth on each item; renderRow
+        // uses _depth to indent the name.
+        getList: doc => doc.elementsInTreeOrder(),
         add: doc => {
             const el = new Element();
             el.id = doc.nextId('element');
@@ -1714,18 +1764,46 @@ const DECLARATION_CONFIG = {
         updateFromRow: (doc, id, row) => {
             const item = doc.elements.find(x => x.id === id);
             if (!item) return;
-            const inputs = row.querySelectorAll('input, select');
-            item.name = inputs[0].value;
+            const inputs  = row.querySelectorAll('input[type="text"]');
+            const numIn   = row.querySelector('input[type="number"]');
+            const selects = row.querySelectorAll('select');
+            item.name    = inputs[0].value;
             item.purpose = inputs[1].value;
-            item.asil = inputs[2].value;
+            // selects[0] is the parent picker, selects[1] is ASIL.
+            item.parentId = selects[0].value;
+            item.asil     = selects[1].value;
+            const q = parseInt(numIn.value, 10);
+            item.quantity = (isNaN(q) || q < 1) ? 1 : q;
         },
-        renderRow: item => `
-            <div class="req-id" style="align-self:center;" title="Internal stable ID.">${item.id}</div>
-            <input type="text" value="${(item.name||'').replace(/"/g,'&quot;')}" placeholder="Element name (no spaces)">
-            <input type="text" value="${(item.purpose||'').replace(/"/g,'&quot;')}" placeholder="One-sentence purpose">
-            <select title="Inherited or decomposed ASIL.">${GRAMMAR.asilLevels.map(a=>`<option ${item.asil===a?'selected':''}>${a}</option>`).join('')}</select>
-            <button class="del-btn req-delete" title="Delete this element">✕</button>
-        `
+        renderRow: item => {
+            const depth = item._depth || 0;
+            const indent = depth > 0 ? '<span style="color:#adb5bd;">' + '·  '.repeat(depth) + '</span>' : '';
+            return `
+                <div class="req-id" style="align-self:center;" title="Internal stable ID.">${item.id}</div>
+                <div style="display:flex;align-items:center;gap:0.25rem;">
+                    ${indent}<input type="text" value="${(item.name||'').replace(/"/g,'&quot;')}" placeholder="Element name (no spaces)" style="flex:1;">
+                </div>
+                <input type="text" value="${(item.purpose||'').replace(/"/g,'&quot;')}" placeholder="One-sentence purpose">
+                <select data-elem="parent" title="Parent element in the breakdown."></select>
+                <input type="number" min="1" step="1" value="${item.quantity || 1}" title="Number of identical instances.">
+                <select title="Inherited or decomposed ASIL.">${GRAMMAR.asilLevels.map(a=>`<option ${item.asil===a?'selected':''}>${a}</option>`).join('')}</select>
+                <button class="del-btn req-delete" title="Delete this element">✕</button>
+            `;
+        },
+        // Parent dropdown is populated here so we can read the current
+        // doc.elements list (including descendants of `item`, which are
+        // excluded). Repaints whenever this row re-renders.
+        postRender: (row, item, doc, refresh) => {
+            const sel = row.querySelector('select[data-elem="parent"]');
+            if (!sel) return;
+            const blocked = doc.descendantsOf(item.id);
+            const opts = [`<option value="" ${!item.parentId ? 'selected' : ''}>(root)</option>`];
+            doc.elements.forEach(e => {
+                if (blocked.has(e.id)) return;
+                opts.push(`<option value="${e.id}" ${item.parentId === e.id ? 'selected' : ''}>${(e.name || e.id).replace(/"/g,'&quot;')}</option>`);
+            });
+            sel.innerHTML = opts.join('');
+        }
     },
     interface: {
         title: 'External Interfaces',
@@ -1734,13 +1812,17 @@ const DECLARATION_CONFIG = {
         helpHeaders: {
             'Name':      'Interface label (e.g. CAN_PT, LIN_BCM, HV_BUS).',
             'Kind':      'data = software signal/message; physical = HW pin/bus/connector/supply.',
-            'Producer':  'Element or external system originating the signal. Autocompletes from declared elements and previously-typed names.',
-            'Direction': 'producer→consumer (one-way), consumer→producer (one-way), or bidirectional.',
-            'Consumer':  'Element or external system receiving the signal. Same autocomplete as producer.',
+            'Node A':    'One communication partner. Direction column says whether this side produces, consumes, or peers. Autocompletes from declared elements and previously-typed names.',
+            'Direction': 'A→B (Node A produces), A←B (Node A consumes), or A↔B (bidirectional / peer-to-peer).',
+            'Node B':    'The other communication partner.',
             'Protocol':  'Protocol or physical medium (CAN, LIN, FlexRay, Ethernet, 12V supply, K-line, etc.).',
             '▸':         'Expand to edit SMART details: data type, range, units, period, jitter, failure behaviour, notes.'
         },
-        headers: ['ID', 'Name', 'Kind', 'Producer', 'Direction', 'Consumer', 'Protocol', '▸', ''],
+        // The `producer` / `consumer` field IDs are kept (storage stays
+        // stable); only the UI labels change to "Node A" / "Node B"
+        // because not every interface has a definite producer/consumer
+        // relationship — peer-to-peer buses don't.
+        headers: ['ID', 'Name', 'Kind', 'Node A', 'Direction', 'Node B', 'Protocol', '▸', ''],
         gridCols: '90px 1fr 90px 1fr 130px 1fr 110px 30px 40px',
         getList: doc => doc.interfaces,
         add: doc => {
@@ -1755,23 +1837,28 @@ const DECLARATION_CONFIG = {
             const inputs  = row.querySelectorAll('input[type="text"]');
             const selects = row.querySelectorAll('select');
             item.name      = inputs[0].value;
-            item.producer  = inputs[1].value;
-            item.consumer  = inputs[2].value;
+            item.producer  = inputs[1].value;  // Node A in the UI
+            item.consumer  = inputs[2].value;  // Node B in the UI
             item.protocol  = inputs[3].value;
             item.kind      = selects[0].value;
             item.direction = selects[1].value;
-            // Bank producer/consumer values into the lexicon so future
-            // interface rows autocomplete from them — solves E3.
+        },
+        // Bank the just-typed peer names on commit. Same pattern as
+        // assumption.commitFromRow; the name "producers"/"consumers" on
+        // the lexicon side mirrors the field name, not the UI label.
+        commitFromRow: (doc, id) => {
+            const item = doc.interfaces.find(x => x.id === id);
+            if (!item) return;
             doc.addToLexicon('producers', item.producer);
             doc.addToLexicon('consumers', item.consumer);
         },
         renderRow: item => {
             const dirArrow = {
-                'producer-to-consumer': '→',
-                'consumer-to-producer': '←',
-                'bidirectional':        '↔',
-                'unidirectional':       '→'  // legacy
-            }[item.direction] || '→';
+                'producer-to-consumer': 'A→B',
+                'consumer-to-producer': 'A←B',
+                'bidirectional':        'A↔B',
+                'unidirectional':       'A→B'  // legacy
+            }[item.direction] || 'A→B';
             return `
                 <div class="req-id" style="align-self:center;" title="Internal stable ID.">${item.id}</div>
                 <input type="text" value="${(item.name||'').replace(/"/g,'&quot;')}" placeholder="e.g. CAN_PT">
@@ -1779,13 +1866,13 @@ const DECLARATION_CONFIG = {
                     <option value="data" ${item.kind==='data'?'selected':''}>data</option>
                     <option value="physical" ${item.kind==='physical'?'selected':''}>physical</option>
                 </select>
-                <input type="text" list="lex-producers" value="${(item.producer||'').replace(/"/g,'&quot;')}" placeholder="Producer">
-                <select data-if="direction">
-                    <option value="producer-to-consumer" ${item.direction==='producer-to-consumer'||item.direction==='unidirectional'?'selected':''}>${dirArrow} producer→consumer</option>
-                    <option value="consumer-to-producer" ${item.direction==='consumer-to-producer'?'selected':''}>← consumer→producer</option>
-                    <option value="bidirectional"        ${item.direction==='bidirectional'?'selected':''}>↔ bidirectional</option>
+                <input type="text" list="lex-producers" value="${(item.producer||'').replace(/"/g,'&quot;')}" placeholder="Node A">
+                <select data-if="direction" title="${dirArrow}">
+                    <option value="producer-to-consumer" ${item.direction==='producer-to-consumer'||item.direction==='unidirectional'?'selected':''}>A→B (A produces)</option>
+                    <option value="consumer-to-producer" ${item.direction==='consumer-to-producer'?'selected':''}>A←B (A consumes)</option>
+                    <option value="bidirectional"        ${item.direction==='bidirectional'?'selected':''}>A↔B (bidirectional)</option>
                 </select>
-                <input type="text" list="lex-consumers" value="${(item.consumer||'').replace(/"/g,'&quot;')}" placeholder="Consumer">
+                <input type="text" list="lex-consumers" value="${(item.consumer||'').replace(/"/g,'&quot;')}" placeholder="Node B">
                 <input type="text" value="${(item.protocol||'').replace(/"/g,'&quot;')}" placeholder="CAN, LIN, ...">
                 <button type="button" class="if-expand" data-if-id="${item.id}" title="Edit SMART details (data type, range, period, jitter, failure behaviour)" style="background:none;border:1px solid #ced4da;border-radius:3px;cursor:pointer;font-size:13px;line-height:1;padding:2px 6px;">▸</button>
                 <button class="del-btn req-delete" title="Delete this interface">✕</button>
@@ -1875,14 +1962,24 @@ const DECLARATION_CONFIG = {
             item.guard          = inputs[1].value;
             item.transitionTime = inputs[2].value;
         },
+        // Triggers and guards become reusable terminology — bank both
+        // on commit so the simulator's trigger picker and other rows'
+        // autocomplete pick them up. Commit only (blur / Enter), never
+        // on every keystroke.
+        commitFromRow: (doc, id) => {
+            const item = doc.modeTransitions.find(x => x.id === id);
+            if (!item) return;
+            doc.addToLexicon('triggers', item.trigger);
+        },
         renderRow: item => {
             // The mode dropdowns are populated at postRender time so we
-            // can read the latest doc.modes. Here we render placeholders.
+            // can read the latest doc.modes. Trigger gets a datalist
+            // (lex-triggers) so previously-typed triggers reappear.
             return `
                 <div class="req-id" style="align-self:center;" title="Internal stable ID.">${item.id}</div>
                 <select data-tr="from"></select>
                 <select data-tr="to"></select>
-                <input type="text" value="${(item.trigger||'').replace(/"/g,'&quot;')}" placeholder="e.g. ignition off">
+                <input type="text" list="lex-triggers" value="${(item.trigger||'').replace(/"/g,'&quot;')}" placeholder="e.g. ignition off">
                 <input type="text" value="${(item.guard||'').replace(/"/g,'&quot;')}" placeholder="optional precondition">
                 <input type="text" value="${(item.transitionTime||'').replace(/"/g,'&quot;')}" placeholder="100 ms">
                 <button class="del-btn req-delete" title="Delete this transition">✕</button>

@@ -137,7 +137,6 @@ class SummaryView {
         if (items.length === 0) {
             itemsHtml = `<li style="color:#999;font-style:italic;">${emptyText || 'none declared'}</li>`;
         } else {
-            console.log("DEBUG AUTOCOMPLETE LIST: ", items);
             itemsHtml = items.slice(0, 30).map(i =>
                 `<li class="${i.cls || ''}"><span>${i.text}</span><span class="count-badge" ${i.badgeTitle ? `title="${i.badgeTitle.replace(/"/g,'&quot;')}"` : ''}>${i.badge}</span></li>`
             ).join('');

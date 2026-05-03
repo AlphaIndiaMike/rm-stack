@@ -24,6 +24,12 @@
  * predicate slots (capability, actor, condition, ...) plus owners and
  * signoff names, so the next time the user types into the same kind
  * of slot they get autocomplete suggestions. Passive — never enforced.
+ *
+ * Writes happen ONLY at commit time (see SyrsDocument.addToLexicon).
+ * Calling addToLexicon from an `input` handler instead of a commit
+ * handler would store every keystroke as a lexicon entry; the
+ * prefix-prune inside addToLexicon prevents that pollution from
+ * persisting once a real commit lands.
  */
 
 const ID_PREFIX = {
@@ -148,9 +154,22 @@ class Element {
         this.purpose   = data.purpose || '';
         this.asil      = migrateAsilValue(data.asil || 'QM');
         this.allocatedItemFunctions = data.allocatedItemFunctions || [];
+        // Hierarchy: parent element ID, '' for roots. Cycles are
+        // prevented at edit time by SyrsDocument.descendantsOf, which
+        // excludes self and descendants from the parent dropdown.
+        this.parentId  = data.parentId || '';
+        // Multiplicity of identical instances (e.g. 4 wheel-speed
+        // sensors). Default 1. Surfaced in the right-pane element
+        // count as a sum.
+        this.quantity  = (data.quantity != null) ? data.quantity : 1;
     }
     static generateId() { return 'ELEM-' + Math.random().toString(36).substr(2, 5).toUpperCase(); }
-    toJSON() { return Object.assign({}, this); }
+    toJSON() {
+        // _depth is a transient render-time tag (see elementsInTreeOrder)
+        // and must not be persisted.
+        const { _depth, ...rest } = this;
+        return rest;
+    }
 }
 
 
@@ -408,14 +427,38 @@ class SyrsDocument {
     }
 
     /**
-     * Push a value into a lexicon category if not already present.
-     * Used by the editor on every commit so vocabulary builds up.
+     * Add a value to a lexicon category for future autocomplete.
+     *
+     * Contract — call ONLY at commit time
+     * -----------------------------------
+     * Lexicon writes must happen on a discrete user commit (a Save button,
+     * an Enter key, a structured commit handler) — never inside an `input`
+     * event listener. Calling this on every keystroke pollutes the lexicon
+     * with every prefix the user typed on the way to the real word
+     * ("E", "En", "Env", ..., "Environment"), which then shows up in every
+     * autocomplete dropdown forever.
+     *
+     * Defensive prune
+     * ---------------
+     * To make the contract self-healing, when adding `value` we also drop
+     * any existing entries in the same category that are strict prefixes
+     * of `value`. So if a callsite ever regresses and writes keystrokes
+     * ("E", "En", "Env"), the very next genuine commit ("Environment")
+     * cleans up its own trail.
      */
     addToLexicon(category, value) {
         if (!value) return;
         const v = String(value).trim();
         if (!v) return;
         if (!Array.isArray(this.lexicon[category])) this.lexicon[category] = [];
+        // Drop any existing entry that is a strict prefix of `v` — those
+        // are typing-trace pollution from a prior bug, or stale partial
+        // commits superseded by this longer one.
+        this.lexicon[category] = this.lexicon[category].filter(existing =>
+            !(typeof existing === 'string'
+              && existing.length < v.length
+              && v.startsWith(existing))
+        );
         if (!this.lexicon[category].includes(v)) this.lexicon[category].push(v);
     }
 
@@ -489,6 +532,61 @@ class SyrsDocument {
     /** Requirements belonging to a specific element (Chapter 7 leaves) */
     requirementsForElement(elementId) {
         return this.requirements.filter(r => r.elementId === elementId);
+    }
+
+    /**
+     * Elements walked in tree order (parents before children, siblings
+     * grouped). Each entry is the existing Element instance with a
+     * transient `_depth` numeric tag for indentation. _depth is excluded
+     * from toJSON so it never persists.
+     *
+     * Orphan handling: an element whose parentId points to a deleted
+     * parent appears at root (depth 0) so it's never lost.
+     */
+    elementsInTreeOrder() {
+        const byParent = new Map();
+        this.elements.forEach(e => {
+            const p = e.parentId || '';
+            if (!byParent.has(p)) byParent.set(p, []);
+            byParent.get(p).push(e);
+        });
+        const placed = new Set();
+        const out = [];
+        const visit = (parentId, depth) => {
+            (byParent.get(parentId) || []).forEach(e => {
+                e._depth = depth;
+                placed.add(e.id);
+                out.push(e);
+                visit(e.id, depth + 1);
+            });
+        };
+        visit('', 0);
+        // Surface orphans (parent deleted) at the root, after the legit tree.
+        this.elements.forEach(e => {
+            if (!placed.has(e.id)) {
+                e._depth = 0;
+                out.push(e);
+            }
+        });
+        return out;
+    }
+
+    /** Set of element IDs that descend from `elementId`, plus elementId
+     *  itself. Used by the parent-picker to exclude self and descendants
+     *  so cycles can't be introduced. */
+    descendantsOf(elementId) {
+        const out = new Set([elementId]);
+        let grew = true;
+        while (grew) {
+            grew = false;
+            this.elements.forEach(e => {
+                if (e.parentId && out.has(e.parentId) && !out.has(e.id)) {
+                    out.add(e.id);
+                    grew = true;
+                }
+            });
+        }
+        return out;
     }
 
     /**
