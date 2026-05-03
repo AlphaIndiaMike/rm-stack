@@ -41,35 +41,85 @@ class DocumentValidator {
         };
     }
 
-    /** Orphan report - requirements referencing undeclared things. */
+    /** Orphan report — requirements referencing undeclared things.
+     *  Names are resolved through `doc.nameForId` so the badge in the
+     *  right-pane summary shows e.g. "Avoid runaway" rather than
+     *  "SG-0001". Dangling refs still display the original ID so the
+     *  user can locate the broken pointer. */
     orphanReport() {
         const orphans = [];
-        const declaredElements = new Set(this.doc.elements.map(e => e.name));
-        const declaredFunctions = new Set(this.doc.itemFunctions.map(f => f.id));
-        const declaredSGs = new Set(this.doc.safetyGoals.map(g => g.id));
+        const declaredElementNames = new Set(this.doc.elements.map(e => e.name));
+        const declaredElementIds   = new Set(this.doc.elements.map(e => e.id));
+        const declaredFunctions    = new Set(this.doc.itemFunctions.map(f => f.id));
+        const declaredSGs          = new Set(this.doc.safetyGoals.map(g => g.id));
+        const declaredModes        = new Set(this.doc.modes.map(m => m.id));
+        const declaredSafeStates   = new Set((this.doc.safeStates || []).map(s => s.id));
+        const declaredReqs         = new Set(this.doc.requirements.map(r => r.id));
+
+        const push = (req, issue) => orphans.push({ id: req.id, issue });
 
         this.doc.requirements.forEach(req => {
             // Subject must be declared (or "the system")
-            if (req.subject && req.subject !== 'the system' && !declaredElements.has(req.subject)) {
-                orphans.push({ id: req.id, issue: `Subject "${req.subject}" not a declared element` });
+            if (req.subject && req.subject !== 'the system' && !declaredElementNames.has(req.subject)) {
+                push(req, `Subject "${req.subject}" not a declared element`);
             }
             // parentSG if present must resolve
             if (req.parentSG && !declaredSGs.has(req.parentSG)) {
-                orphans.push({ id: req.id, issue: `Parent SG "${req.parentSG}" not declared` });
+                push(req, `Parent SG "${this.doc.nameForId(req.parentSG)}" not declared`);
+            }
+            // safeStateRef if present must resolve to a declared SafeState
+            if (req.safeStateRef && !declaredSafeStates.has(req.safeStateRef)) {
+                push(req, `Safe state "${this.doc.nameForId(req.safeStateRef)}" not declared`);
+            }
+            // Structured array refs
+            (req.parentFsrs || []).forEach(id => {
+                if (!declaredReqs.has(id)) push(req, `Parent FSR ${id} not declared`);
+            });
+            (req.parentAcceptanceReqs || []).forEach(id => {
+                if (!declaredReqs.has(id)) push(req, `Parent acceptance req ${id} not declared`);
+            });
+            (req.parentItemFunctions || []).forEach(id => {
+                if (!declaredFunctions.has(id)) push(req, `Parent item function ${id} not declared`);
+            });
+            (req.modeApplicability || []).forEach(id => {
+                if (!declaredModes.has(id)) push(req, `Mode applicability ${id} not declared`);
+            });
+            (req.allocation || []).forEach(id => {
+                // Allocation entries can be element IDs (modern) or free-text labels (legacy).
+                // Only flag when the value matches the ELEM-prefix pattern but not declared.
+                if (/^ELEM-/.test(id) && !declaredElementIds.has(id)) {
+                    push(req, `Allocated element ${id} not declared`);
+                }
+            });
+            // Legacy: source field as space-separated IDs
+            if (typeof req.source === 'string' && req.source.trim()) {
+                req.source.split(/[\s,]+/).forEach(tok => {
+                    if (!tok) return;
+                    if (/^SG-/.test(tok)    && !declaredSGs.has(tok))       push(req, `Source SG ${tok} not declared`);
+                    if (/^ITEMF-/.test(tok) && !declaredFunctions.has(tok)) push(req, `Source item function ${tok} not declared`);
+                    if (/^ELEM-/.test(tok)  && !declaredElementIds.has(tok))push(req, `Source element ${tok} not declared`);
+                    if (/^REQ-/.test(tok)   && !declaredReqs.has(tok))      push(req, `Source requirement ${tok} not declared`);
+                });
             }
         });
 
         return orphans;
     }
 
-    /** Item function coverage: how many acceptance requirements trace to each. */
+    /** Item function coverage: how many acceptance / element requirements
+     *  trace to each. Counts both the structured `parentItemFunctions`
+     *  array (preferred) and a legacy `source` substring match so old
+     *  data keeps working. */
     itemFunctionCoverage() {
+        const has = (req, fnId) =>
+            (Array.isArray(req.parentItemFunctions) && req.parentItemFunctions.includes(fnId))
+            || (req.source && req.source.includes(fnId));
         return this.doc.itemFunctions.map(fn => {
             const tracedAcceptance = this.doc.requirements.filter(r =>
-                r.chapterId === 'ch05_acceptance' && r.source && r.source.includes(fn.id)
+                r.chapterId === 'ch05_acceptance' && has(r, fn.id)
             ).length;
             const tracedElement = this.doc.requirements.filter(r =>
-                r.chapterId === 'ch07_elements' && r.source && r.source.includes(fn.id)
+                r.chapterId === 'ch07_elements' && has(r, fn.id)
             ).length;
             return {
                 id: fn.id,
@@ -81,21 +131,39 @@ class DocumentValidator {
         });
     }
 
-    /** Safety Goal coverage end-to-end. */
+    /** Safety Goal coverage end-to-end. Walks the structured parent
+     *  chain: SG ← FSR (via parentSG); Acceptance ← FSR (via parentFsrs);
+     *  Element ← Acceptance (via parentAcceptanceReqs). Falls back to
+     *  legacy direct parentSG-on-everything for old data. */
     safetyGoalCoverage() {
+        const reqs = this.doc.requirements;
         return this.doc.safetyGoals.map(sg => {
-            const hasFsr = this.doc.requirements.some(r => r.chapterId === 'ch04_fsc' && r.parentSG === sg.id);
-            const hasAcceptance = this.doc.requirements.some(r => r.chapterId === 'ch05_acceptance' && r.parentSG === sg.id);
-            const hasElement = this.doc.requirements.some(r => r.chapterId === 'ch07_elements' && r.parentSG === sg.id);
+            const fsrs = reqs.filter(r =>
+                r.chapterId === 'ch04_fsc' && r.parentSG === sg.id);
+            const fsrIds = new Set(fsrs.map(r => r.id));
+            const accReqs = reqs.filter(r =>
+                r.chapterId === 'ch05_acceptance' && (
+                    (Array.isArray(r.parentFsrs) && r.parentFsrs.some(id => fsrIds.has(id)))
+                    || r.parentSG === sg.id  // legacy
+                ));
+            const accIds = new Set(accReqs.map(r => r.id));
+            const elemReqs = reqs.filter(r =>
+                r.chapterId === 'ch07_elements' && (
+                    (Array.isArray(r.parentAcceptanceReqs) && r.parentAcceptanceReqs.some(id => accIds.has(id)))
+                    || r.parentSG === sg.id  // legacy
+                ));
             return {
                 id: sg.id,
                 name: sg.name,
                 asil: sg.asil,
                 ftti: sg.ftti,
-                hasFsr,
-                hasAcceptance,
-                hasElement,
-                complete: hasFsr && hasAcceptance && hasElement
+                hasFsr:        fsrs.length > 0,
+                hasAcceptance: accReqs.length > 0,
+                hasElement:    elemReqs.length > 0,
+                fsrCount:      fsrs.length,
+                acceptanceCount: accReqs.length,
+                elementCount:  elemReqs.length,
+                complete: fsrs.length > 0 && accReqs.length > 0 && elemReqs.length > 0
             };
         });
     }

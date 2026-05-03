@@ -87,6 +87,23 @@ class Requirement {
         this.rationale     = data.rationale || '';
         this.source        = data.source || '';
         this.allocation    = data.allocation || [];
+        // Structured upstream traceability (per-chapter attribute).
+        // parentItemFunctions: array of ItemFunction IDs that this
+        //   requirement realises. Used by validator.itemFunctionCoverage
+        //   so the right-pane A:/E: counters reflect actual mappings
+        //   rather than hoping the user typed the ID into Source.
+        // parentFsrs: array of FSR (Ch.4) requirement IDs that this
+        //   acceptance/element req traces from.
+        // parentAcceptanceReqs: array of Ch.5 requirement IDs that
+        //   this element req decomposes.
+        this.parentItemFunctions = data.parentItemFunctions || [];
+        this.parentFsrs          = data.parentFsrs || [];
+        this.parentAcceptanceReqs= data.parentAcceptanceReqs || [];
+        this.modeApplicability   = data.modeApplicability || [];
+        this.warningStrategy     = data.warningStrategy || '';
+        this.degradationStrategy = data.degradationStrategy || '';
+        this.supervisionAssumption = data.supervisionAssumption || '';
+        this.fttiContribution    = data.fttiContribution || '';
         this.verification  = data.verification || '';
         this.passCriterion = data.passCriterion || '';
         this.asil          = migrateAsilValue(data.asil || '');
@@ -215,6 +232,33 @@ class Mode {
 }
 
 
+/**
+ * ModeTransition — directed edge in the mode/state model.
+ *
+ *   fromMode / toMode : Mode IDs (or '' if not yet picked)
+ *   trigger           : event/condition that fires the transition
+ *   guard             : additional precondition (optional)
+ *   transitionTime    : time budget for completing the transition
+ *
+ * Used for c6g of Chapter 6 ("Every mode transition has ID, source,
+ * target, trigger.") and for cross-referencing FSR safe-state refs
+ * against the actual transition graph at validation time.
+ */
+class ModeTransition {
+    constructor(data) {
+        data = data || {};
+        this.id             = data.id || ModeTransition.generateId();
+        this.fromMode       = data.fromMode || '';
+        this.toMode         = data.toMode || '';
+        this.trigger        = data.trigger || '';
+        this.guard          = data.guard || '';
+        this.transitionTime = data.transitionTime || '';
+    }
+    static generateId() { return 'TR-' + Math.random().toString(36).substr(2, 4).toUpperCase(); }
+    toJSON() { return Object.assign({}, this); }
+}
+
+
 class InterfaceSpec {
     constructor(data) {
         data = data || {};
@@ -222,12 +266,21 @@ class InterfaceSpec {
         this.name      = data.name || '';
         this.producer  = data.producer || '';
         this.consumer  = data.consumer || '';
-        this.direction = data.direction || 'unidirectional';
+        // direction: 'producer-to-consumer' | 'consumer-to-producer'
+        //          | 'bidirectional'
+        // (legacy 'unidirectional' is treated as producer-to-consumer)
+        this.direction = data.direction || 'producer-to-consumer';
+        // kind: 'data' (SW signal/message) or 'physical' (HW pin/bus/connector)
+        this.kind      = data.kind || 'data';
+        // Protocol or physical medium ('CAN', 'LIN', 'FlexRay', '12V supply', etc.)
+        this.protocol  = data.protocol || '';
         this.dataType  = data.dataType || '';
         this.range     = data.range || '';
+        this.unit      = data.unit || '';
         this.period    = data.period || '';
         this.jitter    = data.jitter || '';
         this.failureBehavior = data.failureBehavior || '';
+        this.notes     = data.notes || '';
     }
     static generateId() { return 'IF-' + Math.random().toString(36).substr(2, 5).toUpperCase(); }
     toJSON() { return Object.assign({}, this); }
@@ -264,6 +317,7 @@ class SyrsDocument {
         this.safetyGoals   = (data.safetyGoals || []).map(g => new SafetyGoal(g));
         this.safeStates    = (data.safeStates || []).map(s => new SafeState(s));
         this.modes         = (data.modes || []).map(m => new Mode(m));
+        this.modeTransitions = (data.modeTransitions || []).map(t => new ModeTransition(t));
         this.interfaces    = (data.interfaces || []).map(i => new InterfaceSpec(i));
         this.assumptions   = (data.assumptions || []).map(a => new Assumption(a));
         this.checklistState = data.checklistState || {}; // { chapterId: { checkId: bool } }
@@ -280,7 +334,7 @@ class SyrsDocument {
         ['capabilities','actors','conditions','reactions','triggers',
          'inputs','outputs','properties','units','tolerances','standards',
          'fromStates','toStates','prohibitedBehaviors','boundingConditions',
-         'owners','signoffNames'].forEach(k => {
+         'owners','signoffNames','producers','consumers'].forEach(k => {
              if (!Array.isArray(this.lexicon[k])) this.lexicon[k] = [];
         });
 
@@ -301,6 +355,7 @@ class SyrsDocument {
             ['requirement',    this.requirements],
             ['itemFunction',   this.itemFunctions],
             ['mode',           this.modes],
+            ['modeTransition', this.modeTransitions],
             ['assumption',     this.assumptions],
             ['safetyGoal',     this.safetyGoals],
             ['safeState',      this.safeStates],
@@ -414,6 +469,7 @@ class SyrsDocument {
             safetyGoals: this.safetyGoals.map(g => g.toJSON()),
             safeStates: this.safeStates.map(s => s.toJSON()),
             modes: this.modes.map(m => m.toJSON()),
+            modeTransitions: this.modeTransitions.map(t => t.toJSON()),
             interfaces: this.interfaces.map(i => i.toJSON()),
             assumptions: this.assumptions.map(a => a.toJSON()),
             checklistState: this.checklistState,

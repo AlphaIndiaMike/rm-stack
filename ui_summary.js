@@ -123,7 +123,7 @@ class SummaryView {
         const orph = validator.orphanReport();
         const tip = 'Requirements that reference an element, item function, or Safety Goal that is not declared. Every orphan must be resolved before signoff.';
         return this._makeList('Orphans', orph.length, orph.map(o => ({
-            text: o.id,
+            text: `${this.doc.nameForId(o.id)} <small style="color:#999;font-family:monospace;">${o.id}</small>`,
             badge: o.issue,
             badgeTitle: o.issue,
             cls: 'error'
