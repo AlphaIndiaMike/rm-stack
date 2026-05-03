@@ -15,12 +15,8 @@
 
             <div class="d-flex align-items-center gap-2">
                 <label for="disciplineSelect" class="text-white small mb-0">Discipline:</label>
-                <select id="disciplineSelect" class="form-select form-select-sm">
-                    <option value="system" selected>System</option>
-                    <option value="item" disabled>Item (V2)</option>
-                    <option value="software" disabled>Software (V2)</option>
-                    <option value="hardware" disabled>Hardware (V3)</option>
-                </select>
+                <!-- Populated at startup from the Disciplines registry — see main.js -->
+                <select id="disciplineSelect" class="form-select form-select-sm"></select>
             </div>
 
             <div class="d-flex align-items-center gap-2">
@@ -71,21 +67,129 @@
         </aside>
     </div>
 
-    <!-- Scripts in dependency order -->
+    <!--
+        Scripts in dependency order. The order tells the story —
+        registries first, then the data they hold, then the UI that
+        consumes them.
+
+          1. Pure utility libs
+          2. Domain model (data classes)
+          3. Three registries (discipline, chapter, declaration)
+          4. Declaration kinds — each registers itself into Declarations
+          5. Disciplines — each registers itself into Disciplines
+          6. Chapter files — each registers itself into Chapters
+          7. UI helpers used by the editor frame
+          8. Editor / outline / summary views
+          9. Persistence + export
+         10. main.js bootstraps the app
+    -->
+
+    <!-- 1. Pure utility libs -->
     <script src="grammar.js"></script>
-    <script src="outline.js"></script>
     <script src="timing.js"></script>
-    <script src="model_base.js"></script>
-    <script src="model_system.js"></script>
-    <script src="validator.js"></script>
-    <script src="persistence.js"></script>
-    <script src="export.js"></script>
     <script src="tooltip.js"></script>
     <script src="ui_widgets.js"></script>
-    <script src="chapter5_features.js"></script>
+
+    <!-- 2. Domain model -->
+    <script src="model_base.js"></script>
+
+    <!-- 3. Registries -->
+    <script src="discipline_registry.js"></script>
+    <script src="chapter_registry.js"></script>
+    <script src="declaration_registry.js"></script>
+
+    <!-- 4. Declaration kinds (self-register into Declarations) -->
+    <script src="declarations/element.js"></script>
+    <script src="declarations/hwComponent.js"></script>
+    <script src="declarations/swUnit.js"></script>
+    <script src="declarations/interface.js"></script>
+    <script src="declarations/mode.js"></script>
+    <script src="declarations/modeTransition.js"></script>
+    <script src="declarations/itemFunction.js"></script>
+    <script src="declarations/safetyGoal.js"></script>
+    <script src="declarations/safeState.js"></script>
+    <script src="declarations/assumption.js"></script>
+    <script src="declarations/failureMode.js"></script>
+    <script src="declarations/timingChain.js"></script>
+
+    <!-- 5. Disciplines (self-register into Disciplines) -->
+    <script src="disciplines/system.js"></script>
+    <script src="disciplines/item.js"></script>
+    <script src="disciplines/hardware.js"></script>
+    <script src="disciplines/software.js"></script>
+
+    <!-- 6a. System chapters (self-register into Chapters under 'system').
+            Order in this list does not matter — Chapters.register sorts
+            by spec.order on insertion. We list them in document order
+            so the file system reflects the document. -->
+    <script src="disciplines/system/front_matter.js"></script>
+    <script src="disciplines/system/ch01_scope.js"></script>
+    <script src="disciplines/system/ch02_item.js"></script>
+    <script src="disciplines/system/ch03_sg.js"></script>
+    <script src="disciplines/system/ch04_fsc.js"></script>
+    <script src="disciplines/system/ch05_acceptance.js"></script>
+    <script src="disciplines/system/ch06_breakdown.js"></script>
+    <script src="disciplines/system/ch07_elements.js"></script>
+    <script src="disciplines/system/ch08_allocation.js"></script>
+    <script src="disciplines/system/ch09_hsi.js"></script>
+    <script src="disciplines/system/ch10_hw.js"></script>
+    <script src="disciplines/system/ch11_sw.js"></script>
+    <script src="disciplines/system/ch12_safety_analyses.js"></script>
+    <script src="disciplines/system/ch13_calibration.js"></script>
+    <script src="disciplines/system/ch14_env.js"></script>
+    <script src="disciplines/system/ch15_cyber.js"></script>
+    <script src="disciplines/system/ch16_hmi.js"></script>
+    <script src="disciplines/system/ch17_assumptions.js"></script>
+    <script src="disciplines/system/ch18_lifecycle.js"></script>
+    <script src="disciplines/system/ch19_verif.js"></script>
+    <script src="disciplines/system/ch20_trace.js"></script>
+
+    <!-- 6b. Item chapters -->
+    <script src="disciplines/item/front_matter.js"></script>
+    <script src="disciplines/item/ch02_item.js"></script>
+    <script src="disciplines/item/hara.js"></script>
+    <script src="disciplines/item/fsc.js"></script>
+    <script src="disciplines/item/verification.js"></script>
+    <script src="disciplines/item/assumptions.js"></script>
+
+    <!-- 6c. Hardware chapters -->
+    <script src="disciplines/hardware/front_matter.js"></script>
+    <script src="disciplines/hardware/hw_safety_reqs.js"></script>
+    <script src="disciplines/hardware/hw_arch_design.js"></script>
+    <script src="disciplines/hardware/hw_detailed_design.js"></script>
+    <script src="disciplines/hardware/hw_safety_analyses.js"></script>
+    <script src="disciplines/hardware/hw_hsi.js"></script>
+    <script src="disciplines/hardware/hw_verification.js"></script>
+    <script src="disciplines/hardware/hw_assumptions.js"></script>
+
+    <!-- 6d. Software chapters -->
+    <script src="disciplines/software/front_matter.js"></script>
+    <script src="disciplines/software/sw_safety_reqs.js"></script>
+    <script src="disciplines/software/sw_arch_design.js"></script>
+    <script src="disciplines/software/sw_detailed_design.js"></script>
+    <script src="disciplines/software/sw_unit_verif.js"></script>
+    <script src="disciplines/software/sw_integration_verif.js"></script>
+    <script src="disciplines/software/sw_qualification.js"></script>
+    <script src="disciplines/software/sw_config_calibration.js"></script>
+    <script src="disciplines/software/sw_assumptions.js"></script>
+
+    <!-- 7. UI helpers used by the editor frame -->
+    <script src="ui/welcome_panel.js"></script>
+    <script src="ui/datalists.js"></script>
+    <script src="ui/declaration_table.js"></script>
+    <script src="ui/checklist.js"></script>
+
+    <!-- 8. Editor / outline / summary views -->
     <script src="ui_outline.js"></script>
     <script src="ui_editor.js"></script>
     <script src="ui_summary.js"></script>
+
+    <!-- 9. Cross-cutting concerns -->
+    <script src="validator.js"></script>
+    <script src="persistence.js"></script>
+    <script src="export.js"></script>
+
+    <!-- 10. Bootstrap -->
     <script src="main.js"></script>
 </body>
 </html>

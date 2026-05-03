@@ -41,7 +41,8 @@ const ID_PREFIX = {
     safetyGoal:     'SG',
     safeState:      'SS',
     element:        'ELEM',
-    interfaceSpec:  'IF'
+    interfaceSpec:  'IF',
+    failureMode:    'FM'
 };
 
 /**
@@ -154,14 +155,27 @@ class Element {
         this.purpose   = data.purpose || '';
         this.asil      = migrateAsilValue(data.asil || 'QM');
         this.allocatedItemFunctions = data.allocatedItemFunctions || [];
-        // Hierarchy: parent element ID, '' for roots. Cycles are
-        // prevented at edit time by SyrsDocument.descendantsOf, which
-        // excludes self and descendants from the parent dropdown.
         this.parentId  = data.parentId || '';
-        // Multiplicity of identical instances (e.g. 4 wheel-speed
-        // sensors). Default 1. Surfaced in the right-pane element
-        // count as a sum.
         this.quantity  = (data.quantity != null) ? data.quantity : 1;
+
+        // Discipline discriminator. 'system' (default) is the System
+        // breakdown view; 'hw' is the HW Components view (HW chapters);
+        // 'sw' is the SW Units view (SW chapters). Each declaration
+        // file (declarations/element.js, declarations/hwComponent.js,
+        // declarations/swUnit.js) filters by this value so the same
+        // doc.elements array serves all three disciplines without
+        // duplication.
+        this.componentKind = data.componentKind || 'system';
+
+        // HW-specific fields. Filled in only on hw rows; ignored
+        // elsewhere. Included on every Element instance so JSON shape
+        // stays uniform (no schema migration when a system element is
+        // re-classified as HW).
+        this.partNumber  = data.partNumber  || '';
+        this.failureRate = data.failureRate || 0;   // FIT (fail / 10⁹ h)
+
+        // SW-specific.
+        this.programmingLang = data.programmingLang || '';
     }
     static generateId() { return 'ELEM-' + Math.random().toString(36).substr(2, 5).toUpperCase(); }
     toJSON() {
@@ -321,6 +335,29 @@ class Assumption {
 
 
 /**
+ * FailureMode — one row of an FMEA / FMEDA. Belongs to a HW component.
+ * Failure rate (λ in FIT) and diagnostic coverage feed PMHF / SPFM /
+ * LFM computation per ISO 26262-5:8 + Annex F. Lives on doc.failureModes;
+ * surfaced through declarations/failureMode.js.
+ */
+class FailureMode {
+    constructor(data) {
+        data = data || {};
+        this.id                 = data.id || FailureMode.generateId();
+        this.componentId        = data.componentId || '';      // ELEM-xxx
+        this.description        = data.description || '';
+        this.effect             = data.effect || '';
+        this.failureRate        = data.failureRate || 0;        // FIT
+        this.diagnosticCoverage = data.diagnosticCoverage || 0; // 0..1
+        this.classification     = data.classification || '';    // safe / single-point / residual / multi-point latent / multi-point detected
+        this.mitigation         = data.mitigation || '';        // safety mechanism reference
+    }
+    static generateId() { return 'FM-' + Math.random().toString(36).substr(2, 4).toUpperCase(); }
+    toJSON() { return Object.assign({}, this); }
+}
+
+
+/**
  * The document - aggregates everything.
  */
 class SyrsDocument {
@@ -339,6 +376,7 @@ class SyrsDocument {
         this.modeTransitions = (data.modeTransitions || []).map(t => new ModeTransition(t));
         this.interfaces    = (data.interfaces || []).map(i => new InterfaceSpec(i));
         this.assumptions   = (data.assumptions || []).map(a => new Assumption(a));
+        this.failureModes  = (data.failureModes || []).map(f => new FailureMode(f));
         this.checklistState = data.checklistState || {}; // { chapterId: { checkId: bool } }
         this.signoffs      = data.signoffs || {};         // { chapterId: { owner, timestamp } }
 
@@ -379,7 +417,8 @@ class SyrsDocument {
             ['safetyGoal',     this.safetyGoals],
             ['safeState',      this.safeStates],
             ['element',        this.elements],
-            ['interfaceSpec',  this.interfaces]
+            ['interfaceSpec',  this.interfaces],
+            ['failureMode',    this.failureModes]
         ];
         sources.forEach(([kind, arr]) => {
             const prefix = ID_PREFIX[kind];
@@ -515,6 +554,7 @@ class SyrsDocument {
             modeTransitions: this.modeTransitions.map(t => t.toJSON()),
             interfaces: this.interfaces.map(i => i.toJSON()),
             assumptions: this.assumptions.map(a => a.toJSON()),
+            failureModes: this.failureModes.map(f => f.toJSON()),
             checklistState: this.checklistState,
             signoffs: this.signoffs,
             idCounters: this.idCounters,

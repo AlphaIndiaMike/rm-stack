@@ -25,7 +25,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Top bar wiring ---
     document.getElementById('docClassSelect').value = doc.docClass;
-    document.getElementById('disciplineSelect').value = doc.discipline;
+
+    // Populate the discipline dropdown from the Disciplines registry.
+    // Each discipline file (disciplines/*.js) registered itself at load
+    // time. Disabled disciplines are still shown but greyed out so the
+    // user can see what's coming. The dropdown's value is the discipline
+    // id which doc.discipline carries; switching reloads only the
+    // outline (the document data stays the same — one JSON, four views).
+    const disciplineSelect = document.getElementById('disciplineSelect');
+    disciplineSelect.innerHTML = '';
+    Disciplines.all().forEach(d => {
+        const opt = document.createElement('option');
+        opt.value = d.id;
+        opt.textContent = d.label;
+        opt.disabled = !d.enabled;
+        if (d.description) opt.title = d.description;
+        disciplineSelect.appendChild(opt);
+    });
+    disciplineSelect.value = doc.discipline;
 
     document.getElementById('docClassSelect').addEventListener('change', e => {
         doc.docClass = e.target.value;
@@ -33,7 +50,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('disciplineSelect').addEventListener('change', e => {
-        // For V1 only 'system' is enabled; future versions swap the outline here
+        // One JSON, four views. Switching the discipline swaps the
+        // outline that drives the left pane; the underlying document
+        // data is shared (Safety Goals declared in System show up in
+        // Item, HW components in System Ch.5 show up in HW chapters,
+        // etc.). The chapter selection is cleared because chapter ids
+        // may differ between disciplines.
         doc.discipline = e.target.value;
         editorView.currentChapter = null;
         editorView.currentElement = null;

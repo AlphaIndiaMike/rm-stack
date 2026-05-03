@@ -104,7 +104,10 @@ class Exporter {
         const out = [];
         const stamp = new Date().toISOString().substring(0, 10);
         const classLabel = (CLASS_BUDGETS[doc.docClass] || {}).label || doc.docClass;
-        const outline = OUTLINES[doc.discipline] || [];
+        // Outline comes from the chapter registry now (each chapter file
+        // self-registers under its discipline). Same as Chapters.outline()
+        // returns to ui_outline.js — single source of truth.
+        const outline = Chapters.outline(doc.discipline) || [];
 
         // --- Header ---
         out.push('═'.repeat(72));
@@ -212,7 +215,7 @@ class Exporter {
     static _buildHtml(doc) {
         const stamp = new Date().toISOString().substring(0, 10);
         const classLabel = (CLASS_BUDGETS[doc.docClass] || {}).label || doc.docClass;
-        const outline = OUTLINES[doc.discipline] || [];
+        const outline = Chapters.outline(doc.discipline) || [];
         const title = doc.title || 'System Requirements Specification';
 
         const body = [];

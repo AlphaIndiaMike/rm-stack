@@ -46,7 +46,12 @@ class OutlineView {
 
     render(container) {
         container.innerHTML = '';
-        const outline = OUTLINES[this.doc.discipline] || [];
+        // Outline comes from the chapter registry — each chapter file
+        // self-registers under its discipline. Switching the top-bar
+        // dropdown changes doc.discipline; this call returns the new
+        // outline; the underlying SyrsDocument data is unchanged. One
+        // JSON, four views.
+        const outline = Chapters.outline(this.doc.discipline) || [];
         const validator = new DocumentValidator(this.doc);
 
         const authoring = outline.filter(OutlineView.isAuthoringChapter);
