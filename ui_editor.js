@@ -13,6 +13,30 @@ class EditorView {
         this.currentChapter = null;
         this.currentElement = null; // when we're in Chapter 7 sub-leaf
         this.draftReq = null; // requirement being authored
+
+        // "Commit on outside click" — when the user clicks anywhere
+        // outside the input that currently has focus, blur it. The
+        // browser fires `change` automatically on blur (if the value
+        // changed), and our existing `change` handlers run
+        // commitFromRow + onChange, so the simulator's trigger list,
+        // right-pane summary, etc., all refresh.
+        //
+        // Without this, a value typed into a text input doesn't commit
+        // until the user explicitly tabs/clicks-into another focusable
+        // element. Clicking on dead space, a section title, or the
+        // simulator's blue box wouldn't blur — and the model would
+        // stay stale until something else triggered a render.
+        //
+        // Single document-level listener, installed once for the
+        // EditorView's lifetime. No teardown needed.
+        document.addEventListener('mousedown', e => {
+            const active = document.activeElement;
+            if (!active) return;
+            if (active.tagName !== 'INPUT' && active.tagName !== 'TEXTAREA') return;
+            // Same element or descendant — no commit needed.
+            if (active === e.target || active.contains(e.target)) return;
+            active.blur();
+        }, true);
     }
 
     setDocument(doc) { this.doc = doc; }
@@ -593,15 +617,23 @@ class EditorView {
                     config.updateFromRow(this.doc, item.id, row);
                 });
                 // `change` fires on blur or Enter — that's the commit
-                // moment. Configs that want to bank the just-typed value
-                // into the lexicon (owners, producers, triggers, ...)
-                // do it here, NEVER from `input`. Anything heavier than
-                // a model write goes in commitFromRow so single
-                // keystrokes stay fast.
+                // moment. Run commitFromRow here (lexicon banking) and
+                // fire onChange so dependent widgets refresh — the
+                // simulator's trigger picker, the right-pane summary,
+                // diagnostics, etc.
+                //
+                // Deferred to the next tick: if the blur was caused by
+                // the user clicking another button (e.g. "+ Add"), we
+                // must let that click's bubble phase reach its target
+                // *before* the table re-renders. Otherwise the click
+                // arrives at a now-detached node and is dropped — the
+                // old click-twice bug. setTimeout(_, 0) puts the
+                // re-render after the current event chain unwinds.
                 inp.addEventListener('change', () => {
                     if (typeof config.commitFromRow === 'function') {
                         config.commitFromRow(this.doc, item.id, row);
                     }
+                    setTimeout(() => this.onChange(), 0);
                 });
             });
 

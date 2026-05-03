@@ -1,22 +1,27 @@
 /**
  * chapter5_features.js
  *
- * Three widgets for the System Breakdown chapter (id: ch06_breakdown,
+ * Three widgets for the System Breakdown chapter (id ch06_breakdown,
  * displayed as Chapter 5):
  *
  *   ModeDiagnosticsView       — surfaces forgotten transitions and timing
- *                               crosschecks from DocumentValidator.
+ *                               crosschecks. Pure render, no state.
  *   ModeSimulatorView         — interactive state-machine walker. Pick a
- *                               trigger, press play, watch the mode shift
- *                               or get told why it didn't.
- *   ModeRequirementGenerator  — converts mode transitions into EARS-style
- *                               draft requirements that get appended to
- *                               Chapter 4 (acceptance), with a preview /
- *                               confirm step.
+ *                               trigger, press Step, watch the mode shift
+ *                               or get told why it didn't. State (current
+ *                               mode + log) lives on the instance and
+ *                               survives the editor's full pane re-render.
+ *   ModeRequirementGenerator  — single button. Click it and one EARS
+ *                               requirement per fully-specified mode
+ *                               transition is appended to Chapter 4
+ *                               (Acceptance). Skips transitions whose
+ *                               (from, to, trigger) is already covered
+ *                               so re-clicking is idempotent.
  *
- * Each view is constructed with (doc, onChange) and exposes render(container).
- * Self-contained DOM — no Bootstrap-specific wiring required beyond the
- * existing class names already in styles.css.
+ * All three widgets follow the editor's normal render pattern: the host
+ * passes a container, the widget creates a section, appends it, and is
+ * done. Mutations call onChange() so the host re-renders the whole pane
+ * — same flow as "+ Add Item Function" or any other declaration.
  */
 
 // =============================================================================
@@ -29,38 +34,26 @@ class ModeDiagnosticsView {
     setDocument(doc) { this.doc = doc; }
 
     render(container) {
-        const validator = new DocumentValidator(this.doc);
-        const forgotten = validator.forgottenTransitions();
-        const timing    = validator.timingCrosscheck();
-
+        const v = new DocumentValidator(this.doc);
         const wrap = document.createElement('div');
         wrap.className = 'requirements-section';
         wrap.innerHTML = `<div class="section-title">Mode-Model Diagnostics
             <span class="help-icon" title="Static analysis of the modes / transitions / safe-states declared above. Updates whenever the data changes; nothing here blocks save.">?</span>
         </div>`;
-
-        wrap.appendChild(this._renderList(
-            'Forgotten transitions',
-            forgotten,
-            'Every mode looks reachable and terminating.'
-        ));
-        wrap.appendChild(this._renderList(
-            'Timing vs FTTI',
-            timing,
-            'Every transition into a safe state fits within its Safety Goal\'s FTTI.'
-        ));
-
+        wrap.appendChild(this._list('Forgotten transitions', v.forgottenTransitions(),
+            'Every mode looks reachable and terminating.'));
+        wrap.appendChild(this._list('Timing vs FTTI', v.timingCrosscheck(),
+            "Every transition into a safe state fits within its Safety Goal's FTTI."));
         container.appendChild(wrap);
     }
 
-    _renderList(title, issues, emptyText) {
+    _list(title, issues, emptyText) {
         const block = document.createElement('div');
         block.style.marginBottom = '0.75rem';
-        const heading = document.createElement('div');
-        heading.style.cssText = 'font-size:11px;text-transform:uppercase;color:#666;letter-spacing:0.5px;margin-bottom:0.3rem;';
-        heading.innerHTML = `${title} <span class="count-badge">${issues.length}</span>`;
-        block.appendChild(heading);
-
+        const h = document.createElement('div');
+        h.style.cssText = 'font-size:11px;text-transform:uppercase;color:#666;letter-spacing:0.5px;margin-bottom:0.3rem;';
+        h.innerHTML = `${title} <span class="count-badge">${issues.length}</span>`;
+        block.appendChild(h);
         if (issues.length === 0) {
             const ok = document.createElement('div');
             ok.style.cssText = 'font-size:12px;color:#198754;padding:0.25rem 0.5rem;';
@@ -73,7 +66,7 @@ class ModeDiagnosticsView {
         issues.forEach(it => {
             const li = document.createElement('li');
             li.className = it.kind === 'ttime-over-ftti' ? 'error' : 'warn';
-            li.innerHTML = `<span>${escHtml(it.text)}</span>`;
+            li.innerHTML = `<span>${esc(it.text)}</span>`;
             ul.appendChild(li);
         });
         block.appendChild(ul);
@@ -91,18 +84,15 @@ class ModeSimulatorView {
     constructor(doc) {
         this.doc = doc;
         this.currentModeId = this._initialModeId();
-        this.log = [];
-        // Container + controls are rebuilt on every render(); the
-        // simulator keeps its own state across re-renders so the user
-        // doesn't lose progress when an unrelated row changes.
+        // Last action result: { kind:'ok'|'no-match'|'broken'|'idle', text }
+        // Persists across re-renders so editor pane updates don't blank
+        // the message; only step() / reset() change it.
+        this.message = { kind: 'idle', text: 'Pick a trigger and press Step.' };
     }
 
     setDocument(doc) {
         this.doc = doc;
-        // If the previously-selected mode was deleted, reset.
-        if (!doc.modes.find(m => m.id === this.currentModeId)) {
-            this.reset();
-        }
+        if (!doc.modes.find(m => m.id === this.currentModeId)) this.reset();
     }
 
     _initialModeId() {
@@ -114,55 +104,58 @@ class ModeSimulatorView {
 
     reset() {
         this.currentModeId = this._initialModeId();
-        this.log = [];
+        this.message = { kind: 'idle', text: 'Reset to initial state.' };
     }
 
-    /** Apply a trigger; record outcome. */
+    /** Apply a trigger. Updates currentModeId and message; nothing else. */
     step(triggerName) {
         const trig = String(triggerName || '').trim();
-        if (!trig) return { ok: false, info: 'No trigger picked.' };
-        if (!this.currentModeId) return { ok: false, info: 'No modes declared.' };
-
+        if (!trig) {
+            this.message = { kind: 'no-match', text: 'No trigger picked.' };
+            return;
+        }
+        if (!this.currentModeId) {
+            this.message = { kind: 'no-match', text: 'No modes declared yet.' };
+            return;
+        }
         const fromMode = this.doc.modes.find(m => m.id === this.currentModeId);
         const fromName = fromMode ? (fromMode.name || fromMode.id) : '?';
-
-        const candidates = (this.doc.modeTransitions || []).filter(t =>
+        const matching = (this.doc.modeTransitions || []).filter(t =>
             t.fromMode === this.currentModeId &&
             String(t.trigger || '').trim().toLowerCase() === trig.toLowerCase()
         );
-        if (candidates.length === 0) {
+        if (matching.length === 0) {
             const others = (this.doc.modeTransitions || [])
                 .filter(t => t.fromMode === this.currentModeId)
                 .map(t => t.trigger).filter(Boolean);
-            const info = others.length
-                ? `No transition from "${fromName}" on trigger "${trig}". From here you can fire: ${others.join(', ')}.`
-                : `Mode "${fromName}" has no outbound transitions at all — likely a forgotten edge.`;
-            this.log.push({ kind: 'no-match', text: `${fromName} ✕ "${trig}" — ${info}` });
-            return { ok: false, info };
+            this.message = {
+                kind: 'no-match',
+                text: others.length
+                    ? `No transition from "${fromName}" on "${trig}". Available triggers from here: ${others.join(', ')}.`
+                    : `Mode "${fromName}" has no outbound transitions — likely a forgotten edge.`
+            };
+            return;
         }
-        const t = candidates[0];
+        const t = matching[0];
         const toMode = this.doc.modes.find(m => m.id === t.toMode);
         if (!toMode) {
-            const info = `Transition target ${t.toMode} no longer declared.`;
-            this.log.push({ kind: 'broken-target', text: `${fromName} ✕ ${info}` });
-            return { ok: false, info };
+            this.message = { kind: 'broken',
+                text: `Transition target ${t.toMode} no longer declared.` };
+            return;
         }
         const toName = toMode.name || toMode.id;
         let extra = '';
-        if (t.guard) extra += ` [guard: ${t.guard} — assumed satisfied]`;
-        if (t.transitionTime) extra += ` (${t.transitionTime})`;
-        const info = `${fromName} → ${toName}${extra}`;
-        this.log.push({ kind: 'transition', text: info });
-        if (candidates.length > 1) {
-            this.log.push({ kind: 'ambiguous',
-                text: `Note: ${candidates.length} transitions share trigger "${trig}" from "${fromName}"; first one taken.` });
+        if (t.guard)          extra += ` Guard "${t.guard}" assumed satisfied.`;
+        if (t.transitionTime) extra += ` Transition time: ${t.transitionTime}.`;
+        if (matching.length > 1) {
+            extra += ` (${matching.length} transitions share this trigger; first one taken.)`;
         }
         this.currentModeId = t.toMode;
-        return { ok: true, info };
+        this.message = { kind: 'ok', text: `${fromName} → ${toName}.${extra}` };
     }
 
-    /** Triggers worth offering: every distinct trigger declared on any
-     *  transition, plus anything banked in the lexicon. */
+    /** Triggers worth offering: distinct triggers on declared transitions
+     *  plus the lexicon. */
     availableTriggers() {
         const set = new Set();
         (this.doc.modeTransitions || []).forEach(t => {
@@ -180,29 +173,27 @@ class ModeSimulatorView {
         const wrap = document.createElement('div');
         wrap.className = 'requirements-section';
         wrap.innerHTML = `<div class="section-title">Mode Simulator
-            <span class="help-icon" title="Walk the mode graph trigger by trigger. Helps surface missing edges, mismatched trigger spellings, and unreachable states. Guards are not evaluated — they're shown as informational.">?</span>
+            <span class="help-icon" title="The blue box is the system. Pick a trigger, press Step, and the box's state updates in place. The message below explains what happened — including why a trigger didn't fire (no matching transition, no outbound edges, etc.). Guards are shown but not evaluated.">?</span>
         </div>`;
 
-        const fromMode = this.doc.modes.find(m => m.id === this.currentModeId);
-        const fromName = fromMode ? (fromMode.name || fromMode.id) : '(no mode)';
+        const triggers = this.availableTriggers();
 
+        // Control row: [system box] — [trigger ▾] [▶ Step] [Reset]
         const row = document.createElement('div');
         row.style.cssText = 'display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;background:#f8f9fa;padding:0.6rem 0.75rem;border-radius:6px;border:1px solid #dee2e6;';
 
-        // [system: <mode>]
+        // The blue box represents the system. We update its textContent
+        // and a small "current state" label in place when step() runs —
+        // no full re-render of the surrounding pane.
         const stateBox = document.createElement('div');
-        stateBox.style.cssText = 'padding:6px 12px;background:#0d6efd;color:#fff;border-radius:4px;font-weight:600;font-size:13px;min-width:120px;text-align:center;';
-        stateBox.textContent = fromName;
+        stateBox.style.cssText = 'padding:8px 14px;background:#0d6efd;color:#fff;border-radius:4px;font-size:13px;min-width:160px;text-align:center;line-height:1.3;';
         row.appendChild(stateBox);
 
-        // arrow
         const arrow = document.createElement('span');
         arrow.textContent = '—';
         arrow.style.color = '#6c757d';
         row.appendChild(arrow);
 
-        // trigger picker
-        const triggers = this.availableTriggers();
         const select = document.createElement('select');
         select.className = 'form-select form-select-sm';
         select.style.maxWidth = '220px';
@@ -217,64 +208,64 @@ class ModeSimulatorView {
         });
         row.appendChild(select);
 
-        // play button
         const play = document.createElement('button');
         play.className = 'btn btn-sm btn-success';
         play.textContent = '▶ Step';
         play.disabled = triggers.length === 0;
-        play.addEventListener('click', () => {
-            this.step(select.value);
-            this.render(container.parentNode ? this._replaceTarget(container) : container);
-        });
         row.appendChild(play);
 
-        // reset button
         const reset = document.createElement('button');
         reset.className = 'btn btn-sm btn-outline-secondary';
         reset.textContent = 'Reset';
-        reset.addEventListener('click', () => {
-            this.reset();
-            this.render(this._replaceTarget(container));
-        });
         row.appendChild(reset);
 
         wrap.appendChild(row);
 
-        // log
-        if (this.log.length > 0) {
-            const log = document.createElement('div');
-            log.style.cssText = 'margin-top:0.5rem;font-family:"SF Mono",Consolas,monospace;font-size:12px;background:#fff;border:1px solid #dee2e6;border-radius:4px;padding:0.4rem 0.6rem;max-height:160px;overflow-y:auto;';
-            const recent = this.log.slice(-12);
-            recent.forEach(entry => {
-                const line = document.createElement('div');
-                line.style.cssText = 'padding:1px 0;';
-                if (entry.kind === 'transition')      line.style.color = '#198754';
-                else if (entry.kind === 'no-match')   line.style.color = '#dc3545';
-                else if (entry.kind === 'ambiguous')  line.style.color = '#fd7e14';
-                else                                  line.style.color = '#6c757d';
-                line.textContent = entry.text;
-                log.appendChild(line);
-            });
-            wrap.appendChild(log);
-        }
+        // Message line below the control row. Single sentence, colored
+        // by kind. Replaces the previous scrolling log entirely.
+        const msg = document.createElement('div');
+        msg.style.cssText = 'margin-top:0.5rem;font-size:12px;padding:0.4rem 0.6rem;border-radius:4px;border:1px solid transparent;';
+        wrap.appendChild(msg);
 
+        // paint() refreshes only the blue box and the message — the
+        // select, buttons, and surrounding wrap stay mounted, so the
+        // user's focus, the dropdown's open state, and any scroll
+        // position aren't disturbed.
+        const paint = () => {
+            const m = this.doc.modes.find(x => x.id === this.currentModeId);
+            const name = m ? (m.name || m.id) : '(no mode)';
+            stateBox.innerHTML = `
+                <div style="font-size:10px;opacity:0.8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;">System state</div>
+                <div style="font-weight:600;">${esc(name)}</div>`;
+            const palette = {
+                ok:        { bg: '#d1e7dd', border: '#198754', color: '#0f5132' },
+                'no-match':{ bg: '#f8d7da', border: '#dc3545', color: '#842029' },
+                broken:    { bg: '#f8d7da', border: '#dc3545', color: '#842029' },
+                idle:      { bg: '#e9ecef', border: '#ced4da', color: '#495057' }
+            }[this.message.kind] || { bg: '#e9ecef', border: '#ced4da', color: '#495057' };
+            msg.style.background    = palette.bg;
+            msg.style.borderColor   = palette.border;
+            msg.style.color         = palette.color;
+            msg.textContent = this.message.text;
+        };
+
+        play.addEventListener('click', () => {
+            this.step(select.value);
+            paint();
+        });
+        reset.addEventListener('click', () => {
+            this.reset();
+            paint();
+        });
+
+        paint();
         container.appendChild(wrap);
-    }
-
-    /** Helper: rerender into the same parent slot. Used so the play
-     *  button can refresh the widget without bouncing the whole pane. */
-    _replaceTarget(oldContainer) {
-        const parent = oldContainer.parentNode;
-        if (!parent) return oldContainer;
-        const fresh = document.createElement('div');
-        parent.replaceChild(fresh, oldContainer);
-        return fresh;
     }
 }
 
 
 // =============================================================================
-// Mode-driven requirement generator
+// Mode-driven requirement generator — single button, idempotent
 // =============================================================================
 
 class ModeRequirementGenerator {
@@ -282,139 +273,132 @@ class ModeRequirementGenerator {
     constructor(doc, onChange) {
         this.doc = doc;
         this.onChange = onChange || (() => {});
-        // staged: array of pending Requirement instances, populated by
-        // generate(), reviewed in the preview, committed by accept().
-        this.staged = [];
     }
 
     setDocument(doc) { this.doc = doc; }
 
     /**
-     * Build draft Requirement objects from every mode transition that
-     * has at least from/to/trigger filled in. Drafts are NOT pushed onto
-     * the document yet — the user previews and confirms first.
+     * Append one Requirement to Chapter 4 per fully-specified mode
+     * transition that isn't already covered. Returns the count added.
+     *
+     * Idempotency: a transition is "already covered" when an existing
+     * acceptance requirement has predicate=transition with the same
+     * fromState / toState / trigger. So clicking the button twice on
+     * an unchanged mode model produces zero new requirements the second
+     * time. Editing a transition and re-clicking adds the new variant
+     * but doesn't remove the old one — that's a manual cleanup.
      */
     generate() {
-        this.staged = [];
+        let added = 0;
         (this.doc.modeTransitions || []).forEach(t => {
             const fromMode = this.doc.modes.find(m => m.id === t.fromMode);
             const toMode   = this.doc.modes.find(m => m.id === t.toMode);
             if (!fromMode || !toMode || !t.trigger) return;
+            const fromName = fromMode.name || fromMode.id;
+            const toName   = toMode.name   || toMode.id;
+            const exists = this.doc.requirements.some(r =>
+                r.chapterId === 'ch05_acceptance' &&
+                r.predicate === 'transition' &&
+                r.fromState === fromName &&
+                r.toState   === toName &&
+                r.trigger   === t.trigger
+            );
+            if (exists) return;
             const r = new Requirement({
                 chapterId: 'ch05_acceptance',
                 conditional: 'when',
                 conditionalText: t.trigger,
                 subject: 'the system',
                 predicate: 'transition',
-                fromState: fromMode.name || fromMode.id,
-                toState:   toMode.name   || toMode.id,
+                fromState: fromName,
+                toState:   toName,
                 trigger:   t.trigger,
                 transitionTime: t.transitionTime || '',
-                rationale: `Generated from mode transition ${t.id} (${fromMode.name || fromMode.id} → ${toMode.name || toMode.id}).`,
+                rationale: `Generated from mode transition ${t.id} (${fromName} → ${toName}).`,
                 verification: 'inspection'
             });
-            // Provisional ID; replaced at accept() time via doc.nextId.
-            r.id = '(draft)';
-            this.staged.push(r);
-        });
-        return this.staged;
-    }
-
-    /** Push every staged requirement onto the document and clear staging. */
-    accept() {
-        this.staged.forEach(r => {
             r.id = this.doc.nextId('requirement');
             r.modifiedAt = new Date().toISOString();
             this.doc.requirements.push(r);
+            added++;
         });
-        const n = this.staged.length;
-        this.staged = [];
-        return n;
+        return added;
     }
-
-    discard() { this.staged = []; }
 
     render(container) {
         const wrap = document.createElement('div');
         wrap.className = 'requirements-section';
         wrap.innerHTML = `<div class="section-title">Generate Acceptance Requirements
-            <span class="help-icon" title="Each mode transition with from / to / trigger filled in becomes a draft EARS requirement (predicate: transition) destined for Chapter 4. Review the preview, then commit. Existing requirements are not touched; duplicates may result if you regenerate without cleaning up.">?</span>
+            <span class="help-icon" title="One click: each fully-specified mode transition becomes an EARS requirement (predicate: transition) appended to Chapter 4. Transitions missing from / to / trigger are skipped. Re-clicking is safe — already-generated transitions are detected and not duplicated.">?</span>
         </div>`;
 
-        const ctrl = document.createElement('div');
-        ctrl.style.cssText = 'display:flex;gap:0.5rem;align-items:center;margin-bottom:0.5rem;';
-        const gen = document.createElement('button');
-        gen.className = 'btn btn-sm btn-outline-primary';
-        gen.textContent = 'Preview drafts';
-        gen.addEventListener('click', () => {
-            this.generate();
-            this.render(this._swap(container));
+        // Pre-flight summary: tell the user what the button will do
+        // *before* they click it. Counts: total transitions, how many
+        // are complete (from + to + trigger), how many are already in
+        // Chapter 4. Eligible = complete AND not already covered.
+        const transitions = this.doc.modeTransitions || [];
+        const complete = transitions.filter(t =>
+            t.fromMode && t.toMode && t.trigger);
+        const eligible = complete.filter(t => {
+            const fromName = (this.doc.modes.find(m => m.id === t.fromMode) || {}).name || t.fromMode;
+            const toName   = (this.doc.modes.find(m => m.id === t.toMode)   || {}).name || t.toMode;
+            return !this.doc.requirements.some(r =>
+                r.chapterId === 'ch05_acceptance' &&
+                r.predicate === 'transition' &&
+                r.fromState === fromName &&
+                r.toState   === toName &&
+                r.trigger   === t.trigger);
         });
-        ctrl.appendChild(gen);
+        const existing = transitions.length - eligible.length - (transitions.length - complete.length);
 
-        if (this.staged.length > 0) {
-            const accept = document.createElement('button');
-            accept.className = 'btn btn-sm btn-success';
-            accept.textContent = `Commit ${this.staged.length} to Chapter 4`;
-            accept.addEventListener('click', () => {
-                const n = this.accept();
-                this.onChange();
-                alert(`Added ${n} requirement(s) to Chapter 4 (Acceptance).`);
-            });
-            ctrl.appendChild(accept);
+        const summary = document.createElement('div');
+        summary.style.cssText = 'font-size:12px;color:#555;margin-bottom:0.5rem;';
+        summary.innerHTML = `
+            ${transitions.length} transition(s) declared,
+            ${complete.length} fully specified,
+            ${existing} already in Chapter 4,
+            <strong>${eligible.length}</strong> ready to generate.`;
+        wrap.appendChild(summary);
 
-            const cancel = document.createElement('button');
-            cancel.className = 'btn btn-sm btn-outline-secondary';
-            cancel.textContent = 'Discard preview';
-            cancel.addEventListener('click', () => {
-                this.discard();
-                this.render(this._swap(container));
-            });
-            ctrl.appendChild(cancel);
-        }
-        wrap.appendChild(ctrl);
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-sm btn-primary';
+        btn.textContent = `Generate ${eligible.length} requirement(s) → Chapter 4`;
+        btn.disabled = eligible.length === 0;
+        wrap.appendChild(btn);
 
-        if (this.staged.length === 0) {
-            const empty = document.createElement('div');
-            empty.style.cssText = 'font-size:12px;color:#666;font-style:italic;';
-            empty.textContent = 'No drafts staged. Click "Preview drafts" to generate one requirement per fully-specified mode transition.';
-            wrap.appendChild(empty);
-        } else {
-            this.staged.forEach(r => {
-                const item = document.createElement('div');
-                item.className = 'req-item';
-                item.innerHTML = `
-                    <div class="req-item-header">
-                        <span class="req-id">(draft)</span>
-                        <span class="req-badges"><span class="req-badge">when</span><span class="req-badge">transition</span></span>
-                    </div>
-                    <div>${escHtml(GrammarValidator.buildStatement(r))}</div>
-                    <div style="font-size:11px;color:#666;margin-top:3px;">${escHtml(r.rationale)}</div>
-                `;
-                wrap.appendChild(item);
-            });
-        }
+        // Status line, updated in place after the click. No alert.
+        const status = document.createElement('div');
+        status.style.cssText = 'margin-top:0.5rem;font-size:12px;padding:0.4rem 0.6rem;border-radius:4px;display:none;';
+        wrap.appendChild(status);
+
+        btn.addEventListener('click', () => {
+            const n = this.generate();
+            // Fire onChange so right-pane summary updates with the new
+            // requirement count. Deferred so this click finishes first
+            // (same reason as the text-input change handler).
+            setTimeout(() => this.onChange(), 0);
+            status.style.display = 'block';
+            if (n === 0) {
+                status.style.background   = '#e9ecef';
+                status.style.color        = '#495057';
+                status.textContent = 'Nothing to do — every fully-specified transition is already in Chapter 4.';
+            } else {
+                status.style.background   = '#d1e7dd';
+                status.style.color        = '#0f5132';
+                status.textContent = `Added ${n} requirement(s) to Chapter 4 (Acceptance). Click "4. Acceptance Requirements" in the outline to see them.`;
+            }
+        });
+
         container.appendChild(wrap);
-    }
-
-    _swap(oldContainer) {
-        const parent = oldContainer.parentNode;
-        if (!parent) return oldContainer;
-        const fresh = document.createElement('div');
-        parent.replaceChild(fresh, oldContainer);
-        return fresh;
     }
 }
 
 
 // =============================================================================
-// Local helpers
+// Local helper
 // =============================================================================
 
-function escHtml(s) {
+function esc(s) {
     return String(s == null ? '' : s)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
