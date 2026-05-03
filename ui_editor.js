@@ -931,10 +931,12 @@ class EditorView {
                 this.draftReq.supervisionAssumption,
                 v => { this.draftReq.supervisionAssumption = v; this._refreshPreview(wrap); },
                 'What the end-user is assumed to detect or do'));
-            panel.appendChild(this._makeInputSlot('Verification method',
+            panel.appendChild(this._makeSelectSlot('Verification method *',
+                [{value:'',label:'— select —'}, ...GRAMMAR.verificationMethods.map(m => ({value: m.id, label: m.label}))],
                 this.draftReq.verification,
-                v => { this.draftReq.verification = v; this._refreshPreview(wrap); },
-                'inspection / analysis / test / simulation'));
+                v => { this.draftReq.verification = v; this._refreshPreview(wrap); }));
+            panel.appendChild(this._makeInputSlot('Pass criterion', this.draftReq.passCriterion,
+                v => { this.draftReq.passCriterion = v; this._refreshPreview(wrap); }));
         }
         else if (ch === 'ch05_acceptance') {
             // Acceptance fields. Trace upward to FSR(s) and item
@@ -975,13 +977,19 @@ class EditorView {
             panel.appendChild(this._makeSelectSlot('ASIL *', asilOpts,
                 this.draftReq.asil,
                 v => { this.draftReq.asil = v; this._refreshPreview(wrap); }));
-            panel.appendChild(this._makeSelectSlot('Verification method',
+            panel.appendChild(this._makeSelectSlot('Verification method *',
                 [{value:'',label:'— select —'}, ...GRAMMAR.verificationMethods.map(m => ({value: m.id, label: m.label}))],
                 this.draftReq.verification,
                 v => { this.draftReq.verification = v; this._refreshPreview(wrap); }));
+            panel.appendChild(this._makeInputSlot('Pass criterion', this.draftReq.passCriterion,
+                v => { this.draftReq.passCriterion = v; this._refreshPreview(wrap); }));
             this._mountMultiSelectAttr(panel, 'Mode applicability', 'modeApplicability',
                 this.doc.modes.map(m => ({ value: m.id, label: m.name || m.id })),
                 'No modes declared yet.');
+            panel.appendChild(this._makeSelectSlot('Safe state ref',
+                this._safeStateOptions(),
+                this.draftReq.safeStateRef,
+                v => { this.draftReq.safeStateRef = v; this._refreshPreview(wrap); }));
         }
         else if (ch === 'ch10_hw' || ch === 'ch11_sw') {
             // HW/SW summary chapters: allocation is via the matrix
@@ -997,10 +1005,12 @@ class EditorView {
             panel.appendChild(this._makeSelectSlot('ASIL *', asilOpts,
                 this.draftReq.asil,
                 v => { this.draftReq.asil = v; this._refreshPreview(wrap); }));
-            panel.appendChild(this._makeSelectSlot('Verification method',
+            panel.appendChild(this._makeSelectSlot('Verification method *',
                 [{value:'',label:'— select —'}, ...GRAMMAR.verificationMethods.map(m => ({value: m.id, label: m.label}))],
                 this.draftReq.verification,
                 v => { this.draftReq.verification = v; this._refreshPreview(wrap); }));
+            panel.appendChild(this._makeInputSlot('Pass criterion', this.draftReq.passCriterion,
+                v => { this.draftReq.passCriterion = v; this._refreshPreview(wrap); }));
         }
         else {
             // Default schema (HSI, calibration, env, cyber, HMI,
@@ -1084,11 +1094,14 @@ class EditorView {
      * see what's broken.
      */
     _resolveSourceTokens(src) {
+        console.log("DEBUG: Input to Resolver:", src); // <--- Add this
         if (!src) return '';
-        return String(src).split(/[\s,]+/)
+        const result = String(src).split(/[\s,]+/)
             .filter(Boolean)
             .map(tok => this.doc.nameForId(tok))
             .join(', ');
+        console.log("DEBUG: Output from Resolver:", result); // <--- Add this
+        return result;
     }
 
     _renderSmartAttestations(wrap) {

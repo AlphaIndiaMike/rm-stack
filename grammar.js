@@ -347,11 +347,6 @@ class GrammarValidator {
             warnings.push(`${req.asil} with inspection-only verification requires justification.`);
         }
 
-        // 12. Source required
-        if (!req.source) {
-            warnings.push('No upstream source referenced.');
-        }
-
         // 13. Allocation required (except for acceptance chapter where subject is "the system")
         if (!req.allocation && req.subject !== 'the system') {
             warnings.push('No element allocation specified.');

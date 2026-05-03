@@ -20,7 +20,7 @@ const OUTLINES = {
     system: [
         {
             id: 'front_matter',
-            number: '0',
+            number: '1',
             title: 'Front Matter',
             intro: 'Document class, scope, applicable standards, signoff roles, change control.',
             allowsRequirements: false,
@@ -36,7 +36,7 @@ const OUTLINES = {
         },
         {
             id: 'ch01_scope',
-            number: '1',
+            number: '2',
             title: 'Scope, Purpose, Standards, Tailoring',
             intro: 'Purpose of this document, what it is and is not, related documents, glossary.',
             allowsRequirements: false,
@@ -56,8 +56,8 @@ const OUTLINES = {
         },
         {
             id: 'ch02_item',
-            number: '2',
-            title: 'Item Definition Summary',
+            number: '1',
+            title: 'Item Definition',
             intro: 'Item functions drive downstream. Declared here, referenced everywhere.',
             allowsRequirements: false,
             subjectMode: 'none',
@@ -83,7 +83,7 @@ const OUTLINES = {
         },
         {
             id: 'ch03_sg',
-            number: '3',
+            number: '2',
             title: 'Safety Goals and ASILs',
             intro: 'Input from HARA. Every SG carries ASIL, safe state, FTTI.',
             allowsRequirements: false,
@@ -104,7 +104,7 @@ const OUTLINES = {
         },
         {
             id: 'ch04_fsc',
-            number: '4',
+            number: '3',
             title: 'Functional Safety Concept',
             intro: 'FSRs, warning and degradation concept, emergency operation.',
             allowsRequirements: true,
@@ -125,8 +125,8 @@ const OUTLINES = {
         },
         {
             id: 'ch05_acceptance',
-            number: '5',
-            title: 'System Acceptance Requirements (Black-Box Layer)',
+            number: '4',
+            title: 'Acceptance Requirements (Black-Box Layer)',
             intro: 'The external contract. Subject is always "the system". Tight budget.',
             allowsRequirements: true,
             subjectMode: 'system',
@@ -152,7 +152,7 @@ const OUTLINES = {
         },
         {
             id: 'ch06_breakdown',
-            number: '6',
+            number: '5',
             title: 'System Breakdown',
             intro: 'Elements declared here. Chapter 7 is auto-generated from this list.',
             allowsRequirements: false,
@@ -179,7 +179,7 @@ const OUTLINES = {
         },
         {
             id: 'ch07_elements',
-            number: '7',
+            number: '6',
             title: 'Element Requirements (White-Box Layer)',
             intro: 'Auto-expands one sub-chapter per declared element. Subject = element name.',
             allowsRequirements: false,
@@ -198,7 +198,7 @@ const OUTLINES = {
         },
         {
             id: 'ch08_allocation',
-            number: '8',
+            number: '3',
             title: 'HW/SW Allocation',
             intro: 'Each Chapter 7 requirement allocated to HW, SW, or both.',
             allowsRequirements: false,
@@ -216,7 +216,7 @@ const OUTLINES = {
         },
         {
             id: 'ch09_hsi',
-            number: '9',
+            number: '7',
             title: 'Hardware-Software Interface',
             intro: 'Signal/message catalog, timing chains, diagnostic paths.',
             allowsRequirements: true,
@@ -242,7 +242,7 @@ const OUTLINES = {
         },
         {
             id: 'ch10_hw',
-            number: '10',
+            number: '8',
             title: 'HW Safety Requirements',
             intro: 'High-level HW-SRs with DC targets. Full detail in HW-RS document.',
             allowsRequirements: true,
@@ -261,7 +261,7 @@ const OUTLINES = {
         },
         {
             id: 'ch11_sw',
-            number: '11',
+            number: '9',
             title: 'SW Safety Requirements',
             intro: 'High-level SW-SRs. Full detail in SW-RS document.',
             allowsRequirements: true,
@@ -280,7 +280,7 @@ const OUTLINES = {
         },
         {
             id: 'ch12_safety_analyses',
-            number: '12',
+            number: '4',
             title: 'Safety Analyses Summary',
             intro: 'FMEA, FTA, DFA summaries with links to full analyses.',
             allowsRequirements: false,
@@ -302,7 +302,7 @@ const OUTLINES = {
         },
         {
             id: 'ch13_calibration',
-            number: '13',
+            number: '10',
             title: 'Calibration and Configuration',
             intro: 'Calibratable parameters with ranges, defaults, validation.',
             allowsRequirements: true,
@@ -319,7 +319,7 @@ const OUTLINES = {
         },
         {
             id: 'ch14_env',
-            number: '14',
+            number: '11',
             title: 'Environmental and Operational Envelope',
             intro: 'Temperature, voltage, EMC, vibration, ingress.',
             allowsRequirements: true,
@@ -340,7 +340,7 @@ const OUTLINES = {
         },
         {
             id: 'ch15_cyber',
-            number: '15',
+            number: '12',
             title: 'Cybersecurity Interaction',
             intro: 'Safety-security interaction points. Reference to TARA.',
             allowsRequirements: true,
@@ -359,7 +359,7 @@ const OUTLINES = {
         },
         {
             id: 'ch16_hmi',
-            number: '16',
+            number: '13',
             title: 'Human Factors / HMI and Warning Concept',
             intro: 'Driver warnings, takeover requests, degradation notifications.',
             allowsRequirements: true,
@@ -378,7 +378,7 @@ const OUTLINES = {
         },
         {
             id: 'ch17_assumptions',
-            number: '17',
+            number: '14',
             title: 'Assumptions, Open Points, SEooC Conditions',
             intro: 'Every assumption owned, every open point with closure target.',
             allowsRequirements: false,
@@ -400,7 +400,7 @@ const OUTLINES = {
         },
         {
             id: 'ch18_lifecycle',
-            number: '18',
+            number: '15',
             title: 'Production, Operation, Service, Decommissioning',
             intro: 'Field behavior constraints from Part 7.',
             allowsRequirements: true,
@@ -419,7 +419,7 @@ const OUTLINES = {
         },
         {
             id: 'ch19_verif',
-            number: '19',
+            number: '5',
             title: 'Verification Strategy',
             intro: 'Default verification method per requirement class.',
             allowsRequirements: false,
@@ -437,7 +437,7 @@ const OUTLINES = {
         },
         {
             id: 'ch20_trace',
-            number: '20',
+            number: '6',
             title: 'Traceability',
             intro: 'Trace matrix, orphan report, coverage reports.',
             allowsRequirements: false,
