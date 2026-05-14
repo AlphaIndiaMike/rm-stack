@@ -6,8 +6,8 @@
  * with predicate "exhibit" or "process"; the property/value/unit/range
  * slots carry the structured detail).
  *
- * Reuses AllocationMatrixWidget so calibration parameters can be
- * allocated to elements (which element holds the calibration?).
+ * NOTE on allocation: the old allocation matrix was removed (see
+ * ch10_hw.js header). Author calibration requirements here directly.
  */
 
 Chapters.register('system', {
@@ -19,9 +19,6 @@ Chapters.register('system', {
     allowsRequirements: true,
     subjectMode: 'element',
     requirementBudget: { min: 0, max: 20 },
-    extraWidgets: (doc, onChange) => [
-        new AllocationMatrixWidget(doc, onChange, 'ch13_calibration', 'Calibration Allocation Matrix')
-    ],
     checklist: [
         { id: 'c13a', text: 'Every calibratable parameter has ID, range, default, unit, owner, ASIL.',
           help: 'Use the requirement builder with predicate "exhibit" or "process".' },

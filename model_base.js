@@ -42,7 +42,8 @@ const ID_PREFIX = {
     safeState:      'SS',
     element:        'ELEM',
     interfaceSpec:  'IF',
-    failureMode:    'FM'
+    failureMode:    'FM',
+    hsiSignal:      'HSI'
 };
 
 /**
@@ -90,6 +91,12 @@ class Requirement {
         this.clause = data.clause || '';
         this.prohibitedBehavior = data.prohibitedBehavior || '';
         this.boundingCondition = data.boundingCondition || '';
+        // 'interface' predicate fields (HSI signal-definition requirements)
+        this.signalName       = data.signalName || '';
+        this.pin              = data.pin || '';
+        this.signalProperties = data.signalProperties || '';
+        this.signalTiming     = data.signalTiming || '';
+        this.signalFailure    = data.signalFailure || '';
         // Attributes
         this.rationale     = data.rationale || '';
         this.source        = data.source || '';
@@ -358,6 +365,58 @@ class FailureMode {
 
 
 /**
+ * HsiSignal — one row of the Hardware-Software Interface definition.
+ *
+ * An HSI is fundamentally a catalog: each signal maps to a physical
+ * location (pin / connector / bus) and carries electrical + timing +
+ * data properties. These statements are structural / non-functional —
+ * "pin 7 carries VBAT", "CAN message 0x1A0 transmits vehicle speed
+ * every 10 ms" — so they don't fit the SMART/EARS behavioural sentence
+ * shape ("when X the system shall Y"). They are captured here as
+ * structured rows instead.
+ *
+ * A fully-specified row can still be *exported* as a requirement via
+ * the chapter's "Generate interface requirements" button — see
+ * disciplines/system/ch09_hsi.js. The generated requirement uses the
+ * 'interface' predicate (grammar.js) with an EARS-style ubiquitous
+ * pattern: "The <interface> shall define <signal> ...".
+ *
+ * Fields:
+ *   name            signal/message identifier (VehicleSpeed, VBAT, CAN_TX0)
+ *   interfaceId     IF-xxx — the parent InterfaceSpec this belongs to
+ *   pin             physical pin / connector position / bus address
+ *   direction       'input' | 'output' | 'bidirectional' (from the
+ *                   item's perspective)
+ *   signalType      'analog' | 'digital' | 'pwm' | 'bus-message' | 'discrete' | 'power'
+ *   electrical      voltage / current / level description ("0–5 V", "12 V nominal", "3.3 V CMOS")
+ *   encoding        data encoding / resolution ("uint16, 0.01 km/h/bit", "active-low")
+ *   period          update period ("10 ms", "on-change", "continuous")
+ *   failureBehavior behaviour on loss / corruption ("hold last", "default safe value", "high-Z")
+ *   diagnostic      how the signal is monitored ("range check", "rolling counter + CRC", "none")
+ *   notes           anything else
+ */
+class HsiSignal {
+    constructor(data) {
+        data = data || {};
+        this.id              = data.id || HsiSignal.generateId();
+        this.name            = data.name || '';
+        this.interfaceId     = data.interfaceId || '';
+        this.pin             = data.pin || '';
+        this.direction       = data.direction || 'input';
+        this.signalType      = data.signalType || 'digital';
+        this.electrical      = data.electrical || '';
+        this.encoding        = data.encoding || '';
+        this.period          = data.period || '';
+        this.failureBehavior = data.failureBehavior || '';
+        this.diagnostic      = data.diagnostic || '';
+        this.notes           = data.notes || '';
+    }
+    static generateId() { return 'HSI-' + Math.random().toString(36).substr(2, 4).toUpperCase(); }
+    toJSON() { return Object.assign({}, this); }
+}
+
+
+/**
  * The document - aggregates everything.
  */
 class SyrsDocument {
@@ -377,6 +436,7 @@ class SyrsDocument {
         this.interfaces    = (data.interfaces || []).map(i => new InterfaceSpec(i));
         this.assumptions   = (data.assumptions || []).map(a => new Assumption(a));
         this.failureModes  = (data.failureModes || []).map(f => new FailureMode(f));
+        this.hsiSignals    = (data.hsiSignals || []).map(s => new HsiSignal(s));
         this.checklistState = data.checklistState || {}; // { chapterId: { checkId: bool } }
         this.signoffs      = data.signoffs || {};         // { chapterId: { owner, timestamp } }
 
@@ -418,7 +478,8 @@ class SyrsDocument {
             ['safeState',      this.safeStates],
             ['element',        this.elements],
             ['interfaceSpec',  this.interfaces],
-            ['failureMode',    this.failureModes]
+            ['failureMode',    this.failureModes],
+            ['hsiSignal',      this.hsiSignals]
         ];
         sources.forEach(([kind, arr]) => {
             const prefix = ID_PREFIX[kind];
@@ -555,6 +616,7 @@ class SyrsDocument {
             interfaces: this.interfaces.map(i => i.toJSON()),
             assumptions: this.assumptions.map(a => a.toJSON()),
             failureModes: this.failureModes.map(f => f.toJSON()),
+            hsiSignals: this.hsiSignals.map(s => s.toJSON()),
             checklistState: this.checklistState,
             signoffs: this.signoffs,
             idCounters: this.idCounters,

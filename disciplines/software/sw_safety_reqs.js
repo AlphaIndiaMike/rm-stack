@@ -4,8 +4,9 @@
  * SW Chapter 2 — SW Safety Requirements. REUSES chapter id 'ch11_sw'
  * from the System discipline. ASPICE SWE.1, ISO 26262-6:6.
  *
- * Surfaces the allocation matrix so SW engineers can see upstream
- * element requirements and the SW-allocated subset.
+ * NOTE on allocation: the old allocation matrix was removed (see
+ * disciplines/hardware/hw_safety_reqs.js header). Record the upstream
+ * trace with each SW-SR's Parent FSR(s) attribute.
  */
 
 Chapters.register('software', {
@@ -17,9 +18,6 @@ Chapters.register('software', {
     allowsRequirements: true,
     subjectMode: 'element',
     requirementBudget: { min: 0, max: 80 },
-    extraWidgets: (doc, onChange) => [
-        new AllocationMatrixWidget(doc, onChange, 'ch11_sw', 'SW Allocation Matrix')
-    ],
     checklist: [
         { id: 'ssr1', text: 'Every SW-SR has a DC target and fault model.' },
         { id: 'ssr2', text: 'Every SW-SR traces to a parent TSR.' },

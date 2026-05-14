@@ -251,7 +251,9 @@ class EditorView {
                         unit:'units',            tolerance:'tolerances',
                         standard:'standards',    fromState:'fromStates',
                         toState:'toStates',      prohibitedBehavior:'prohibitedBehaviors',
-                        boundingCondition:'boundingConditions'
+                        boundingCondition:'boundingConditions',
+                        signalName:'signalNames', pin:'pins',
+                        signalProperties:'signalProperties'
                     })[f.id];
                     const slot = this._makeInputSlot(
                         f.label + (f.required ? ' *' : ''),
@@ -553,6 +555,9 @@ class EditorView {
         lex('toStates',     r.toState);
         lex('prohibitedBehaviors', r.prohibitedBehavior);
         lex('boundingConditions',  r.boundingCondition);
+        lex('signalNames',         r.signalName);
+        lex('pins',                r.pin);
+        lex('signalProperties',    r.signalProperties);
 
         this.editingExisting = false;
         this.draftReq = this._newDraft();

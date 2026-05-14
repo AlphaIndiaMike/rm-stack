@@ -4,6 +4,10 @@
  * System Chapter 9 (display) — SW Safety Requirements. Summary layer.
  * Full SW detail in the SW-RS document (the Software discipline adds
  * richer chapters; this one is the System view).
+ *
+ * NOTE on allocation: the old allocation matrix was removed (see
+ * ch10_hw.js header). Author SW-SRs here directly; record the upstream
+ * trace with the Parent FSR(s) attribute.
  */
 
 Chapters.register('system', {
@@ -15,9 +19,6 @@ Chapters.register('system', {
     allowsRequirements: true,
     subjectMode: 'element',
     requirementBudget: { min: 0, max: 40 },
-    extraWidgets: (doc, onChange) => [
-        new AllocationMatrixWidget(doc, onChange, 'ch11_sw', 'SW Allocation Matrix')
-    ],
     checklist: [
         { id: 'c11a', text: 'Every SW-implemented safety mechanism has a SW-SR with DC target.',
           help: 'ISO 26262-6:6 — range checks, plausibility checks, voting, control-flow monitors, watchdogs.' },
