@@ -185,9 +185,28 @@ class EditorView {
         wrap.className = 'req-builder';
         wrap.innerHTML = `<h6>${this.editingExisting ? `Editing ${this.draftReq.id}` : 'New Requirement'}</h6>`;
 
-        // Row 1 — Conditional + Subject + Predicate
+        // Row 1 — State guard (optional) + Conditional + Subject + Predicate.
+        //
+        // EARS' combined pattern is "While [state], when [event], the
+        // [subject] shall [response]". The state-guard slot is the
+        // optional "While [state]" half; the conditional dropdown +
+        // free-text below is the "when [event]" half. Either, both, or
+        // neither may be filled — neither = ubiquitous.
         const row1 = document.createElement('div');
         row1.className = 'req-slot-row';
+
+        // State guard — always shown, always optional. Free text so
+        // phrases like "any state other than X" work without forcing
+        // a structured mode reference.
+        const stateGuardSlot = this._makeInputSlot(
+            'State guard (optional)',
+            this.draftReq.stateGuard,
+            v => { this.draftReq.stateGuard = v; this._refreshPreview(wrap); },
+            'e.g. "the system is initialized", "any state other than Off"'
+        );
+        stateGuardSlot.style.flex = '1';
+        stateGuardSlot.style.minWidth = '180px';
+        row1.appendChild(stateGuardSlot);
 
         row1.appendChild(this._makeSelectSlot('Conditional',
             GRAMMAR.conditionals.map(c => ({ value: c.id, label: c.label })),
@@ -196,7 +215,13 @@ class EditorView {
         ));
 
         if (this.draftReq.conditional !== 'ubiquitous') {
-            const condText = this._makeInputSlot('Condition text',
+            // When a state guard is also filled, the EARS combined
+            // pattern renders the trigger as "when [...]" regardless
+            // of the dropdown choice — re-label the slot so the user
+            // sees that.
+            const combined = !!(this.draftReq.stateGuard || '').trim();
+            const triggerLabel = combined ? 'Trigger / event (rendered as "when")' : 'Condition text';
+            const condText = this._makeInputSlot(triggerLabel,
                 this.draftReq.conditionalText,
                 v => { this.draftReq.conditionalText = v; this._refreshPreview(wrap); }
             );
@@ -245,7 +270,7 @@ class EditorView {
                 pred.fields.forEach(f => {
                     const lexCat = ({
                         capability:'capabilities', actor:'actors',
-                        condition:'conditions',  reaction:'reactions',
+                        condition:'conditions',
                         trigger:'triggers',      input:'inputs',
                         output:'outputs',        property:'properties',
                         unit:'units',            tolerance:'tolerances',
@@ -543,7 +568,6 @@ class EditorView {
         lex('capabilities', r.capability);
         lex('actors',       r.actor);
         lex('conditions',   r.condition);
-        lex('reactions',    r.reaction);
         lex('triggers',     r.trigger);
         lex('inputs',       r.input);
         lex('outputs',      r.output);

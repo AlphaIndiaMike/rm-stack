@@ -66,6 +66,16 @@ class Requirement {
         this.elementId     = data.elementId || null; // for Chapter 7 leaves
         this.conditional   = data.conditional || 'ubiquitous';
         this.conditionalText = data.conditionalText || '';
+        // EARS combined-pattern state guard. Optional. When present,
+        // the rendered statement uses the form
+        //   "While [stateGuard], when [conditionalText], the [subject] shall ..."
+        // — the state guard scopes the trigger to a specific operating
+        // state. The conditional dropdown's label switches to "Trigger
+        // / event" in the builder when a state guard is filled, and the
+        // statement always renders the trigger as "when" (regardless of
+        // the dropdown's choice) because EARS' combined pattern is
+        // specifically "While ..., when ...".
+        this.stateGuard = data.stateGuard || '';
         this.subject       = data.subject || '';
         this.predicate     = data.predicate || '';
         // Predicate-specific fields (dynamically populated)
@@ -75,9 +85,13 @@ class Requirement {
         this.actor = data.actor || '';
         this.envelope = data.envelope || '';
         this.condition = data.condition || '';
-        this.reaction = data.reaction || '';
+        // NOTE: the 'detect' predicate is atomic — it carries `condition`
+        // and `detectionTime` only. The reaction to a detected condition
+        // is a SEPARATE requirement (authored with `transition` or
+        // `provide`) that traces to the detection requirement as its
+        // parent. The former `reaction` / `reactionTime` fields were
+        // removed when `detect` was made atomic.
         this.detectionTime = data.detectionTime || '';
-        this.reactionTime = data.reactionTime || '';
         this.dcTarget = data.dcTarget || '';
         this.fromState = data.fromState || '';
         this.toState = data.toState || '';
@@ -448,9 +462,10 @@ class SyrsDocument {
         // slots and people-name fields. Adding a new category is safe; the
         // default-empty dance below will fill it in.
         this.lexicon       = data.lexicon || {};
-        ['capabilities','actors','conditions','reactions','triggers',
+        ['capabilities','actors','conditions','triggers',
          'inputs','outputs','properties','units','tolerances','standards',
          'fromStates','toStates','prohibitedBehaviors','boundingConditions',
+         'signalNames','pins','signalProperties',
          'owners','signoffNames','producers','consumers'].forEach(k => {
              if (!Array.isArray(this.lexicon[k])) this.lexicon[k] = [];
         });

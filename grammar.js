@@ -49,16 +49,22 @@ const GRAMMAR = {
             ]
         },
         {
+            // ATOMIC detect. The template renders only the detection
+            // behaviour — "detect [condition] within [detectionTime]".
+            // The *reaction* to a detected condition is a SEPARATE
+            // requirement (author it with `transition` or `provide`)
+            // that traces to this one as its parent. The old template
+            // "[condition] and [reaction]" fused two behaviours with
+            // two distinct timing budgets into one non-atomic
+            // statement; that is fixed here.
             id: 'detect',
-            label: 'Detect / Monitor / Respond',
+            label: 'Detect / Monitor condition',
             verb: 'detect',
             kind: 'functional',
-            template: '[condition] and [reaction]',
+            template: '[condition] within [detectionTime]',
             fields: [
                 { id: 'condition',     label: 'Condition detected', required: true },
-                { id: 'reaction',      label: 'Reaction',           required: true },
-                { id: 'detectionTime', label: 'Detection time',     required: true, hint: 'e.g. ≤50 ms' },
-                { id: 'reactionTime',  label: 'Reaction time',      required: true, hint: 'must be ≤ FTTI' },
+                { id: 'detectionTime', label: 'Detection time',     required: true, hint: 'e.g. ≤50 ms — must leave room for the reaction within FTTI' },
                 { id: 'dcTarget',      label: 'DC target',          required: false, hint: 'e.g. ≥90% (for safety mechanisms)' }
             ],
             isSafetyMechanism: true
@@ -235,8 +241,23 @@ class GrammarValidator {
         if (!pred) return '';
 
         const subject = req.subject || '[subject]';
-        let prefix = cond.prefix;
-        if (req.conditional !== 'ubiquitous' && req.conditionalText) {
+
+        // Build the prefix. Three cases:
+        //   1. No state guard → existing behaviour (the conditional alone).
+        //   2. State guard + no trigger → "While [guard], ".
+        //   3. State guard + trigger → combined EARS pattern
+        //      "While [guard], when [trigger], ". The trigger is always
+        //      rendered as "when" in this case even if the conditional
+        //      dropdown is set to "while"/"if"/etc., because EARS'
+        //      combined pattern is specifically "While ..., when ...".
+        let prefix = '';
+        const hasTrigger = req.conditional !== 'ubiquitous' && req.conditionalText;
+        if (req.stateGuard) {
+            prefix = `While ${req.stateGuard}, `;
+            if (hasTrigger) {
+                prefix += `when ${req.conditionalText}, `;
+            }
+        } else if (hasTrigger) {
             prefix = cond.prefix + req.conditionalText + ', ';
         }
 
@@ -252,7 +273,7 @@ class GrammarValidator {
                 if (req.envelope) body += ` ${req.envelope}`;
                 break;
             case 'detect':
-                body = `detect ${req.condition || '[condition]'} and ${req.reaction || '[reaction]'}`;
+                body = `detect ${req.condition || '[condition]'}`;
                 if (req.detectionTime) body += ` within ${req.detectionTime}`;
                 break;
             case 'transition':
@@ -325,8 +346,8 @@ class GrammarValidator {
 
         // 5. Forbidden words check across all free text
         const textBlobs = [
-            req.conditionalText, req.input, req.output, req.capability, req.actor,
-            req.envelope, req.condition, req.reaction, req.trigger,
+            req.conditionalText, req.stateGuard, req.input, req.output, req.capability, req.actor,
+            req.envelope, req.condition, req.trigger,
             req.property, req.value, req.tolerance, req.standard, req.clause,
             req.prohibitedBehavior, req.boundingCondition, req.rationale,
             req.signalName, req.pin, req.signalProperties, req.signalTiming, req.signalFailure

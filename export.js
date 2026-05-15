@@ -26,6 +26,7 @@ const ATTR_DEFS = [
     // Predicate-specific slots
     { key: 'conditional',        label: 'Conditional' },
     { key: 'conditionalText',    label: 'Conditional text' },
+    { key: 'stateGuard',         label: 'State guard' },
     { key: 'predicate',          label: 'Predicate' },
     { key: 'input',              label: 'Input' },
     { key: 'output',             label: 'Output' },
@@ -33,9 +34,7 @@ const ATTR_DEFS = [
     { key: 'actor',              label: 'Actor' },
     { key: 'envelope',           label: 'Envelope' },
     { key: 'condition',          label: 'Condition' },
-    { key: 'reaction',           label: 'Reaction' },
     { key: 'detectionTime',      label: 'Detection time' },
-    { key: 'reactionTime',       label: 'Reaction time' },
     { key: 'dcTarget',           label: 'DC target' },
     { key: 'fromState',          label: 'From state' },
     { key: 'toState',            label: 'To state' },
