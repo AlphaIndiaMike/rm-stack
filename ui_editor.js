@@ -270,7 +270,7 @@ class EditorView {
                 pred.fields.forEach(f => {
                     const lexCat = ({
                         capability:'capabilities', actor:'actors',
-                        condition:'conditions',
+                        condition:'conditions',  reaction:'reactions',
                         trigger:'triggers',      input:'inputs',
                         output:'outputs',        property:'properties',
                         unit:'units',            tolerance:'tolerances',
@@ -568,6 +568,7 @@ class EditorView {
         lex('capabilities', r.capability);
         lex('actors',       r.actor);
         lex('conditions',   r.condition);
+        lex('reactions',    r.reaction);
         lex('triggers',     r.trigger);
         lex('inputs',       r.input);
         lex('outputs',      r.output);

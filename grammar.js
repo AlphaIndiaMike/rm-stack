@@ -25,8 +25,46 @@ const GRAMMAR = {
     // Each predicate carries its own structured object fields
     predicates: [
         {
+            // Abstraction layer: acceptance / black-box. Use at the
+            // System or Item level when stating *what* output is derived
+            // from *what* input, with no commitment to implementation.
+            // "the system shall compute the engine torque setpoint from
+            // pedal position, RPM, and gear."
+            id: 'compute',
+            label: 'Compute (black-box / acceptance layer)',
+            verb: 'compute',
+            kind: 'functional',
+            template: '[output] from [input]',
+            fields: [
+                { id: 'output',   label: 'Output (what is computed)', required: true },
+                { id: 'input',    label: 'Input(s)',                  required: true },
+                { id: 'envelope', label: 'Performance envelope',      required: false, hint: 'e.g. within 20 ms, ±0.5 Nm' }
+            ]
+        },
+        {
+            // Abstraction layer: element / HW. Use when the requirement
+            // states a *defined transformation rule* applied to an input
+            // — direction is meaningful. "the ADC interface shall
+            // transform raw ADC counts to engineering units using the
+            // calibration table."
+            id: 'transform',
+            label: 'Transform (element / HW layer)',
+            verb: 'transform',
+            kind: 'functional',
+            template: '[input] into [output]',
+            fields: [
+                { id: 'input',    label: 'Input',  required: true },
+                { id: 'output',   label: 'Output (transformation result)', required: true },
+                { id: 'envelope', label: 'Performance envelope', required: false, hint: 'e.g. within 5 ms, resolution 10 bits' }
+            ]
+        },
+        {
+            // Generic processing — appropriate when the requirement is
+            // about the *what* (this gets processed) and the *how* is
+            // out of scope. "the gateway shall process incoming CAN
+            // frames matching id 0x1A0 into the speed bus message."
             id: 'process',
-            label: 'Process / Compute / Transform',
+            label: 'Process (generic input-to-output)',
             verb: 'process',
             kind: 'functional',
             template: '[input] into [output]',
@@ -49,23 +87,32 @@ const GRAMMAR = {
             ]
         },
         {
-            // ATOMIC detect. The template renders only the detection
-            // behaviour — "detect [condition] within [detectionTime]".
-            // The *reaction* to a detected condition is a SEPARATE
-            // requirement (author it with `transition` or `provide`)
-            // that traces to this one as its parent. The old template
-            // "[condition] and [reaction]" fused two behaviours with
-            // two distinct timing budgets into one non-atomic
-            // statement; that is fixed here.
+            // Canonical EARS event-driven pattern for safety-mechanism
+            // detection. The sentence shape is:
+            //
+            //   "When [condition is detected], the [subject] shall
+            //    [reaction] within [detectionTime]. [DC target]"
+            //
+            // The previous template ("[condition] within [detectionTime]")
+            // was incomplete — detect *what*, do *what about it*? — and
+            // failed SMART Measurable. The reaction is the behaviour the
+            // requirement actually demands and belongs in the sentence,
+            // not split into a separate requirement.
+            //
+            // detectionTime is the bound on the whole detect-and-react
+            // path (must be ≤ FTTI of the parent SG). dcTarget is the
+            // Diagnostic Coverage figure of merit for this mechanism per
+            // ISO 26262-5 Annex F.
             id: 'detect',
-            label: 'Detect / Monitor condition',
+            label: 'Detect condition and react (safety mechanism)',
             verb: 'detect',
             kind: 'functional',
-            template: '[condition] within [detectionTime]',
+            template: 'detect [condition] and [reaction] within [detectionTime]',
             fields: [
-                { id: 'condition',     label: 'Condition detected', required: true },
-                { id: 'detectionTime', label: 'Detection time',     required: true, hint: 'e.g. ≤50 ms — must leave room for the reaction within FTTI' },
-                { id: 'dcTarget',      label: 'DC target',          required: false, hint: 'e.g. ≥90% (for safety mechanisms)' }
+                { id: 'condition',     label: 'Condition detected', required: true,  hint: 'e.g. loss of the wheel-speed signal' },
+                { id: 'reaction',      label: 'Reaction',           required: true,  hint: 'what the subject shall do once the condition is detected' },
+                { id: 'detectionTime', label: 'Reaction time', required: true, hint: 'e.g. ≤50 ms — time from the condition occurring to the reaction completing, must be ≤ FTTI of the parent SG' },
+                { id: 'dcTarget',      label: 'DC target',          required: false, hint: 'e.g. ≥90% (ISO 26262-5 Annex F)' }
             ],
             isSafetyMechanism: true
         },
@@ -250,13 +297,23 @@ class GrammarValidator {
         //      rendered as "when" in this case even if the conditional
         //      dropdown is set to "while"/"if"/etc., because EARS'
         //      combined pattern is specifically "While ..., when ...".
+        //
+        //   4. predicate === 'detect' has its own *body* shape (see the
+        //      'detect' case below — the condition becomes a mid-sentence
+        //      "when ... is detected" clause). The PREFIX rules are the
+        //      same as every other predicate: state guard, conditional
+        //      dropdown, or both. The author can produce e.g.:
+        //        While charging, the system shall ignore update request
+        //            when update request is detected within 10 ms.
+        //      Note: prefer state words (While / During / Where) in the
+        //      conditional dropdown for detect; event words (When / If
+        //      / At) would clash with the synthesised "when ... is
+        //      detected" clause.
         let prefix = '';
         const hasTrigger = req.conditional !== 'ubiquitous' && req.conditionalText;
         if (req.stateGuard) {
             prefix = `While ${req.stateGuard}, `;
-            if (hasTrigger) {
-                prefix += `when ${req.conditionalText}, `;
-            }
+            if (hasTrigger) prefix += `when ${req.conditionalText}, `;
         } else if (hasTrigger) {
             prefix = cond.prefix + req.conditionalText + ', ';
         }
@@ -264,6 +321,16 @@ class GrammarValidator {
         // Predicate-specific object rendering
         let body = '';
         switch (pred.id) {
+            case 'compute':
+                // Acceptance/black-box: "compute [output] from [input]"
+                body = `compute ${req.output || '[output]'} from ${req.input || '[input]'}`;
+                if (req.envelope) body += ` ${req.envelope}`;
+                break;
+            case 'transform':
+                // Element/HW: "transform [input] into [output]"
+                body = `transform ${req.input || '[input]'} into ${req.output || '[output]'}`;
+                if (req.envelope) body += ` ${req.envelope}`;
+                break;
             case 'process':
                 body = `process ${req.input || '[input]'} into ${req.output || '[output]'}`;
                 if (req.envelope) body += ` ${req.envelope}`;
@@ -273,8 +340,20 @@ class GrammarValidator {
                 if (req.envelope) body += ` ${req.envelope}`;
                 break;
             case 'detect':
-                body = `detect ${req.condition || '[condition]'}`;
-                if (req.detectionTime) body += ` within ${req.detectionTime}`;
+                // Render the body exactly as the user specified:
+                //   "[reaction] when [condition] is detected within [time]"
+                // Condition + reaction are stored separately on the
+                // model; this is the only place they get glued
+                // together, with the trigger clause sitting
+                // mid-sentence (NOT in the prefix). The DC trailer is
+                // appended at the end if present.
+                {
+                    const cnd = (req.condition || '[condition]').trim();
+                    const trigger = /\bis detected\b/i.test(cnd) ? cnd : `${cnd} is detected`;
+                    body = `${req.reaction || '[reaction]'} when ${trigger}`;
+                    if (req.detectionTime) body += ` within ${req.detectionTime}`;
+                    if (req.dcTarget)      body += ` (DC ${req.dcTarget})`;
+                }
                 break;
             case 'transition':
                 body = `transition from ${req.fromState || '[fromState]'} to ${req.toState || '[toState]'} upon ${req.trigger || '[trigger]'}`;
@@ -299,7 +378,16 @@ class GrammarValidator {
                 break;
         }
 
-        return `${prefix}${subject} shall ${body}.`;
+        // When the sentence has no conditional prefix the subject leads
+        // the sentence and must be capitalised ("The system shall ...").
+        // When a prefix is present ("When ...,", "While ...,") the
+        // subject sits mid-sentence and stays lowercase. The subject
+        // string is stored lowercase in the model regardless; this is
+        // purely a render-time fix.
+        const subjectOut = prefix
+            ? subject
+            : subject.charAt(0).toUpperCase() + subject.slice(1);
+        return `${prefix}${subjectOut} shall ${body}.`;
     }
 
     /**
@@ -347,7 +435,7 @@ class GrammarValidator {
         // 5. Forbidden words check across all free text
         const textBlobs = [
             req.conditionalText, req.stateGuard, req.input, req.output, req.capability, req.actor,
-            req.envelope, req.condition, req.trigger,
+            req.envelope, req.condition, req.reaction, req.trigger,
             req.property, req.value, req.tolerance, req.standard, req.clause,
             req.prohibitedBehavior, req.boundingCondition, req.rationale,
             req.signalName, req.pin, req.signalProperties, req.signalTiming, req.signalFailure

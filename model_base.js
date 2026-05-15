@@ -85,12 +85,11 @@ class Requirement {
         this.actor = data.actor || '';
         this.envelope = data.envelope || '';
         this.condition = data.condition || '';
-        // NOTE: the 'detect' predicate is atomic — it carries `condition`
-        // and `detectionTime` only. The reaction to a detected condition
-        // is a SEPARATE requirement (authored with `transition` or
-        // `provide`) that traces to the detection requirement as its
-        // parent. The former `reaction` / `reactionTime` fields were
-        // removed when `detect` was made atomic.
+        // The 'detect' predicate is one requirement carrying both halves
+        // of a safety-mechanism mechanism — the condition detected AND
+        // the reaction — bound together by a single detectionTime that
+        // covers the full detect-and-react path (must be ≤ FTTI).
+        this.reaction = data.reaction || '';
         this.detectionTime = data.detectionTime || '';
         this.dcTarget = data.dcTarget || '';
         this.fromState = data.fromState || '';
@@ -462,7 +461,7 @@ class SyrsDocument {
         // slots and people-name fields. Adding a new category is safe; the
         // default-empty dance below will fill it in.
         this.lexicon       = data.lexicon || {};
-        ['capabilities','actors','conditions','triggers',
+        ['capabilities','actors','conditions','reactions','triggers',
          'inputs','outputs','properties','units','tolerances','standards',
          'fromStates','toStates','prohibitedBehaviors','boundingConditions',
          'signalNames','pins','signalProperties',
