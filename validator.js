@@ -140,6 +140,9 @@ class DocumentValidator {
             (req.parentItemFunctions || []).forEach(id => {
                 if (!declaredFunctions.has(id)) push(req, `Parent item function ${id} not declared`);
             });
+            (req.parentSystemReqs || []).forEach(id => {
+                if (!declaredReqs.has(id)) push(req, `Parent System requirement ${id} not declared`);
+            });
             (req.modeApplicability || []).forEach(id => {
                 if (!declaredModes.has(id)) push(req, `Mode applicability ${id} not declared`);
             });

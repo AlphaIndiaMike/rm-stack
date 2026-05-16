@@ -36,6 +36,9 @@ class SummaryView {
         // Interfaces
         container.appendChild(this._interfacesSection());
 
+        // Trace health
+        container.appendChild(this._traceHealthSection(validator));
+
         // Orphans
         container.appendChild(this._orphansSection(validator));
     }
@@ -128,6 +131,58 @@ class SummaryView {
                 : `Producer: ${i.producer} → Consumer: ${i.consumer}`,
             cls: (!i.producer || !i.consumer) ? 'warn' : ''
         })), null, tip);
+    }
+
+    /** Trace Health — one compact section the other panels can't show
+     *  at a glance: how many committed requirements in this discipline
+     *  have NO parent link at all (untraced), and how many safety
+     *  requirements break integrity inheritance (a safety parent's
+     *  ASIL/SIL not carried — no decomposition at the System hop).
+     *  Reuses data already in the document; no new computation cost. */
+    _traceHealthSection(validator) {
+        const tip = 'Untraced = committed requirements with no parent link of any kind. Integrity gap = a requirement whose safety parent (ASIL/SIL) is not carried unchanged (no decomposition at the System→SW/HW hop).';
+        const byId = {};
+        this.doc.requirements.forEach(r => { byId[r.id] = r; });
+
+        const reqs = this.doc.requirements.filter(r => {
+            const ch = findChapter(this.doc.discipline, r.chapterId);
+            return ch && ch.allowsRequirements;
+        });
+
+        let untraced = 0, integrityGaps = 0;
+        reqs.forEach(r => {
+            const hasParent =
+                (r.parentSystemReqs   || []).length ||
+                (r.parentFsrs         || []).length ||
+                (r.parentAcceptanceReqs || []).length ||
+                (r.parentItemFunctions  || []).length ||
+                r.parentSG ||
+                (typeof r.source === 'string' && r.source.trim());
+            if (!hasParent) untraced++;
+
+            const safetyParents = (r.parentSystemReqs || [])
+                .map(id => byId[id])
+                .filter(p => p && (p.asil || '').trim()
+                          && (p.asil || '').trim() !== 'QM');
+            if (safetyParents.length) {
+                const lvl = (r.asil || '').trim();
+                if (!safetyParents.some(p => (p.asil || '').trim() === lvl)) {
+                    integrityGaps++;
+                }
+            }
+        });
+
+        const items = [
+            { text: 'Untraced requirements',
+              badge: String(untraced),
+              badgeTitle: 'No parent link of any kind',
+              cls: untraced ? 'error' : '' },
+            { text: 'Safety integrity gaps',
+              badge: String(integrityGaps),
+              badgeTitle: 'Parent ASIL/SIL not inherited',
+              cls: integrityGaps ? 'error' : '' }
+        ];
+        return this._makeList('Trace Health', null, items, null, tip);
     }
 
     _orphansSection(validator) {

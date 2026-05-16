@@ -636,6 +636,25 @@ button[title] { cursor: pointer; }
 }
 .ms-empty { padding: 10px 12px; color: #999; font-style: italic; }
 
+.ms-filter {
+    position: sticky;
+    top: 0;
+    background: #fff;
+    padding: 6px 8px;
+    border-bottom: 1px solid #e9ecef;
+    z-index: 1;
+}
+.ms-filter-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 5px 8px;
+    font-size: 12px;
+    border: 1px solid #ced4da;
+    border-radius: 3px;
+    outline: none;
+}
+.ms-filter-input:focus { border-color: #0d6efd; }
+
 /* SIL badge classes — parallel to the existing ASIL ones in the
    requirements list. ASIL classes already exist (.asil-d etc.). */
 .req-badge.sil-1 { background: #0dcaf0; color: #333; }

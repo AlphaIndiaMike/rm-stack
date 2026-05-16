@@ -122,8 +122,30 @@ class MultiSelectDropdown {
             empty.textContent = this.emptyLabel;
             this.popover.appendChild(empty);
         } else {
+            // Search filter. Only shown when the list is long enough to
+            // be tedious to scan (e.g. 200 System requirements). For
+            // short lists it would just be noise, so it's hidden under
+            // the threshold. Filtering is case-insensitive substring
+            // over the visible label; it never changes selection, only
+            // visibility, so existing behaviour is untouched.
+            const FILTER_THRESHOLD = 8;
+            let filterInput = null;
+            if (this.options.length > FILTER_THRESHOLD) {
+                const fwrap = document.createElement('div');
+                fwrap.className = 'ms-filter';
+                filterInput = document.createElement('input');
+                filterInput.type = 'text';
+                filterInput.placeholder = `Search ${this.options.length} ${this.unitLabel}s…`;
+                filterInput.className = 'ms-filter-input';
+                // Don't let keystrokes bubble to row/table handlers.
+                filterInput.addEventListener('keydown', e => e.stopPropagation());
+                fwrap.appendChild(filterInput);
+                this.popover.appendChild(fwrap);
+            }
+
             const list = document.createElement('div');
             list.className = 'ms-list';
+            const rows = [];
             this.options.forEach(opt => {
                 const row = document.createElement('label');
                 row.className = 'ms-row';
@@ -142,8 +164,32 @@ class MultiSelectDropdown {
                 span.textContent = opt.label;
                 row.appendChild(span);
                 list.appendChild(row);
+                rows.push({ row, hay: opt.label.toLowerCase() });
             });
             this.popover.appendChild(list);
+
+            if (filterInput) {
+                let noHits = null;
+                filterInput.addEventListener('input', () => {
+                    const q = filterInput.value.trim().toLowerCase();
+                    let visible = 0;
+                    rows.forEach(({ row, hay }) => {
+                        const show = !q || hay.indexOf(q) !== -1;
+                        row.style.display = show ? '' : 'none';
+                        if (show) visible++;
+                    });
+                    if (!noHits) {
+                        noHits = document.createElement('div');
+                        noHits.className = 'ms-empty';
+                        noHits.textContent = 'No matches.';
+                        list.appendChild(noHits);
+                    }
+                    noHits.style.display = visible === 0 ? '' : 'none';
+                });
+                // Focus the search box when the popover opens so the
+                // user can type immediately.
+                setTimeout(() => filterInput.focus(), 0);
+            }
         }
         document.body.appendChild(this.popover);
 
