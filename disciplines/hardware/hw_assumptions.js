@@ -1,16 +1,15 @@
 /**
  * disciplines/hardware/hw_assumptions.js
  *
- * HW Chapter 7 — HW Assumptions and Open Points. REUSES chapter id
- * 'ch17_assumptions' so the assumptions store and checklist surface in
- * the System, Item, SW and HW views alike.
+ * HW Chapter 8 — HW Assumptions and Open Points. REUSES chapter id
+ * 'ch17_assumptions' (shared store across all four views).
  */
 
 Chapters.register('hardware', {
     id: 'ch17_assumptions',
-    number: '7',
+    number: '8',
     title: 'HW Assumptions and Open Points',
-    order: 70,
+    order: 80,
     intro: 'Assumptions the HW requirements depend on but do not enforce — supply quality, EMI environment, neighbouring elements, SEooC integration. Each owned, tracked, closed.',
     allowsRequirements: false,
     subjectMode: 'none',

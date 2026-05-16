@@ -1,33 +1,35 @@
 /**
  * disciplines/software/sw_functional.js
  *
- * SW Chapter 3 — SW Functional Requirements. ASPICE SWE.1,
- * ISO 26262-6:6. The functional behaviour the software must provide,
- * derived from the System TSRs allocated to SW.
+ * SW Chapter 3 — SW Functional & Behavioural Requirements. ASPICE
+ * SWE.1, ISO 26262-6:6, IEC 61508-3:7.2. What the software does:
+ * nominal functions, operating modes and mode transitions, and (for
+ * safety-classified parents) safe-state and degradation behaviour.
+ * Safety and non-safety requirements sit together — integrity is the
+ * ASIL/SIL attribute, not a chapter division.
  *
- * Carries the lightweight 'swUnit' declaration ONLY so a requirement
- * can name a unit as its subject ("the BrakeMonitor unit shall ...").
- * This is not an architecture editor — no scheduling, partitioning or
- * interface tables. Subject = a declared SW unit, or any element.
+ * Carries the lightweight 'swUnit' declaration only so a requirement
+ * can name a unit as its subject. Not an architecture editor.
  */
 
 Chapters.register('software', {
     id: 'sw_functional',
     number: '3',
-    title: 'SW Functional Requirements',
+    title: 'SW Functional & Behavioural Requirements',
     order: 30,
-    intro: 'Functional behaviour the software must provide. Each requirement derives from one or more System Technical Safety Requirements (Parent System TSR(s)).',
+    intro: 'What the software does: nominal functions, operating modes and transitions, and — for safety-classified parents — safe-state and degradation behaviour. Each derives from a System acceptance or TSR requirement; safety integrity is inherited unchanged.',
     allowsRequirements: true,
     subjectMode: 'element',
-    requirementBudget: { min: 0, max: 120 },
+    requirementBudget: { min: 0, max: 140 },
     declarations: ['swUnit'],
     checklist: [
-        { id: 'swf1', text: 'Every SW functional requirement derives from ≥1 System TSR.',
-          help: 'Set Parent System TSR(s) on each requirement. The Inputs chapter flags TSRs with no derived requirement.' },
-        { id: 'swf2', text: 'Subject is a declared SW unit or "the software" — never an internal data structure.',
-          help: 'Keeps requirements at SWE.1 level, not detailed design.' },
-        { id: 'swf3', text: 'Every requirement passes SMART and predicate/EARS checks.' },
-        { id: 'swf4', text: 'ASIL inherited from the parent TSR (or QM if the TSR is QM).' },
-        { id: 'swf5', text: 'Verification method stated per requirement.' }
+        { id: 'swf1', text: 'Every System requirement with a functional SW portion has its behaviour specified here (safety and non-safety).' },
+        { id: 'swf2', text: 'Operating modes and every mode transition specified, including power-up / shutdown.' },
+        { id: 'swf3', text: 'For safety-classified requirements: safe-state behaviour and degradation/limp-home specified.',
+          help: 'Applies to requirements whose System parent carries an ASIL/SIL.' },
+        { id: 'swf4', text: 'Each requirement traces to a System parent and (if safety) carries the parent\'s ASIL/SIL unchanged.',
+          help: 'No decomposition at this hop — the Inputs coverage flags integrity gaps.' },
+        { id: 'swf5', text: 'Subject is a declared SW unit or "the software" — not an internal data structure (that is detailed design).' },
+        { id: 'swf6', text: 'Every requirement passes SMART and predicate/EARS checks and has a verification method.' }
     ]
 });

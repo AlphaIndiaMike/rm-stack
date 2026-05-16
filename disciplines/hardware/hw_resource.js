@@ -1,27 +1,27 @@
 /**
  * disciplines/hardware/hw_resource.js
  *
- * HW Chapter 6 — HW Resource, Environmental & Derating Requirements.
- * ISO 26262-5:6, ASPICE HWE.1. The operating-envelope, derating and
- * EMC obligations stated as requirements (targets the design must
- * meet), inheriting the System environmental envelope. Not measured
- * test results.
+ * HW Chapter 6 — HW Performance & Operating-Condition Requirements.
+ * Non-functional content domain: electrical performance, environmental
+ * envelope, EMC immunity limits, derating. Stated as requirements
+ * (targets, not measured results). ISO 26262-5:6, IEC 61508-2:7.2.3
+ * (EMC immunity limits; de-rating). Safety and non-safety.
  */
 
 Chapters.register('hardware', {
     id: 'hw_resource',
     number: '6',
-    title: 'HW Resource, Environmental & Derating Requirements',
+    title: 'HW Performance & Operating-Condition Requirements',
     order: 60,
-    intro: 'Operating envelope, derating and EMC obligations stated as requirements: voltage/current/temperature ranges, derating margins, EMC class. Targets, not measured results. Inherits the System environmental envelope.',
+    intro: 'Electrical performance, environmental operating envelope, EMC/ESD immunity limits, derating — stated as requirements. Inherits the System environmental envelope. Safety and non-safety.',
     allowsRequirements: true,
     subjectMode: 'element',
-    requirementBudget: { min: 0, max: 60 },
+    requirementBudget: { min: 0, max: 70 },
     checklist: [
         { id: 'hwr1', text: 'Operating envelope (voltage, current, temperature) stated as requirements.' },
-        { id: 'hwr2', text: 'Derating policy stated as requirements (voltage/current/power/temperature margins).' },
-        { id: 'hwr3', text: 'EMC / ESD class stated as requirements where safety-relevant.' },
-        { id: 'hwr4', text: 'Envelope consistent with the System environmental envelope (System Ch.11).' },
-        { id: 'hwr5', text: 'Each environmental requirement derives from a System TSR (Parent System TSR(s)).' }
+        { id: 'hwr2', text: 'Electrical performance characteristics stated as requirements.' },
+        { id: 'hwr3', text: 'EMC / ESD immunity limits stated (IEC 61508-2:7.2.3.2 e).' },
+        { id: 'hwr4', text: 'Derating policy stated as requirements (margins; IEC 61508-2 de-rating).' },
+        { id: 'hwr5', text: 'Envelope consistent with the System environmental envelope; each requirement traces to a System parent.' }
     ]
 });

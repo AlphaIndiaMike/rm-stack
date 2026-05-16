@@ -474,15 +474,15 @@ class EditorView {
                 v => { this.draftReq.hwSwAllocation = v; this._refreshPreview(wrap); }));
         }
         else if (ch === 'ch10_hw' || ch === 'ch11_sw') {
-            // HW-SR / SW-SR derive from the System Technical Safety
-            // Requirements (ch07), not directly from FSRs — ISO 26262-5:6
-            // / -6:6. Safety chapters also collect a DC target + safe
-            // state for the diagnostic path.
-            this._mountMultiSelectAttr(panel, 'Parent System TSR(s) *', 'parentSystemReqs',
-                this.doc.requirementsForChapter('ch07_elements').map(r => ({
-                    value: r.id, label: `${r.id} — ${(r.statement || '').slice(0, 60) || '(no statement)'}`
-                })), 'No System TSRs yet — author them in the System discipline (Chapter 6).');
-            panel.appendChild(this._makeSelectSlot('ASIL *', asilOpts, this.draftReq.asil,
+            // Fault-detection / diagnostics / safety-mechanism content
+            // domain. Parents come from BOTH System layers (acceptance +
+            // TSR). No ASIL/SIL decomposition at this hop — the derived
+            // requirement inherits the parent's integrity (enforced by
+            // the Inputs coverage diagnostic).
+            this._mountMultiSelectAttr(panel, 'Parent System requirement(s) *', 'parentSystemReqs',
+                this._systemParentOptions(),
+                'No System acceptance or TSR requirements yet — author them in the System discipline.');
+            panel.appendChild(this._makeSelectSlot('ASIL / SIL *', asilOpts, this.draftReq.asil,
                 v => { this.draftReq.asil = v; this._refreshPreview(wrap); }));
             panel.appendChild(this._makeInputSlot('Diagnostic Coverage (DC) target', this.draftReq.dcTarget,
                 v => { this.draftReq.dcTarget = v; this._refreshPreview(wrap); },
@@ -497,17 +497,20 @@ class EditorView {
                 v => { this.draftReq.passCriterion = v; this._refreshPreview(wrap); }));
         }
         else if (ch === 'sw_functional' || ch === 'sw_interface' || ch === 'sw_resource'
+              || ch === 'sw_operational'
               || ch === 'hw_functional' || ch === 'hw_interface' || ch === 'hw_resource'
+              || ch === 'hw_reliability'
               || (ch === 'ch13_calibration' && disc === 'software')
               || (ch === 'ch09_hsi' && (disc === 'software' || disc === 'hardware'))) {
-            // SW/HW non-safety requirement chapters: the spine is the
-            // parent System TSR. Allocation is derived from this
-            // reference (A2) — no allocation matrix.
-            this._mountMultiSelectAttr(panel, 'Parent System TSR(s) *', 'parentSystemReqs',
-                this.doc.requirementsForChapter('ch07_elements').map(r => ({
-                    value: r.id, label: `${r.id} — ${(r.statement || '').slice(0, 60) || '(no statement)'}`
-                })), 'No System TSRs yet — author them in the System discipline (Chapter 6).');
-            panel.appendChild(this._makeSelectSlot('ASIL', asilOpts, this.draftReq.asil,
+            // SW/HW requirement content domains. One combined parent
+            // layer (acceptance + TSR) — safety and non-safety together,
+            // integrity is the ASIL/SIL attribute, not a chapter split.
+            // No decomposition at this hop: a safety parent's ASIL/SIL
+            // must be inherited (Inputs coverage flags integrity gaps).
+            this._mountMultiSelectAttr(panel, 'Parent System requirement(s) *', 'parentSystemReqs',
+                this._systemParentOptions(),
+                'No System acceptance or TSR requirements yet — author them in the System discipline.');
+            panel.appendChild(this._makeSelectSlot('ASIL / SIL', asilOpts, this.draftReq.asil,
                 v => { this.draftReq.asil = v; this._refreshPreview(wrap); }));
             panel.appendChild(this._makeSelectSlot('Verification method *', verifOpts,
                 this.draftReq.verification,
@@ -551,6 +554,26 @@ class EditorView {
                 ...(this.doc.safeStates || []).map(s => ({
                     value: s.id, label: s.description || s.id
                 }))];
+    }
+
+    /** Combined System-parent option list for SW/HW requirements:
+     *  black-box acceptance (ch05, where QM / non-safety parents live)
+     *  AND TSR white-box (ch07, where safety parents live). ASPICE
+     *  SWE.1/HWE.1 is one requirement set — no safety/non-safety split —
+     *  so both layers are offered together, each option tagged with its
+     *  layer and integrity so the author can pick the right parent. */
+    _systemParentOptions() {
+        const fmt = (r, layer) => ({
+            value: r.id,
+            label: `[${layer}${r.asil && r.asil !== 'QM' ? ' ' + r.asil : ''}] `
+                + `${r.id} — ${(r.statement || '').slice(0, 55) || '(no statement)'}`
+        });
+        return [
+            ...this.doc.requirementsForChapter('ch05_acceptance')
+                .map(r => fmt(r, 'Acceptance')),
+            ...this.doc.requirementsForChapter('ch07_elements')
+                .map(r => fmt(r, 'TSR'))
+        ];
     }
 
     _mountMultiSelectAttr(panel, label, attrName, options, emptyLabel) {

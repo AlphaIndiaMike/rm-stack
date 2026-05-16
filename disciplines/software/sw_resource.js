@@ -1,32 +1,28 @@
 /**
  * disciplines/software/sw_resource.js
  *
- * SW Chapter 6 — SW Resource, Timing & Performance Requirements.
- * ISO 26262-6:6/7 properties, ASPICE SWE.1 (the SWE.2-level resource
- * and timing *constraints* that legitimately belong on a requirement).
- *
- * These are constraints/budgets stated as requirements — worst-case
- * response time, period/rate, memory and stack budgets, CPU load
- * ceilings. They are NOT measured results (that is integration
- * verification, out of scope) — they are the targets the design must
- * meet, derived from System TSR timing.
+ * SW Chapter 6 — SW Performance, Timing & Resource Requirements. The
+ * non-functional content domain: response time, throughput, period,
+ * memory/stack/CPU budgets. Applies to safety AND non-safety functions
+ * (performance is a non-safety quality too). Targets/constraints, not
+ * measured results. ASPICE SWE.1 BP1 (non-functional), ISO 26262-6:6,
+ * IEC 61508-3:7.2.
  */
 
 Chapters.register('software', {
     id: 'sw_resource',
     number: '6',
-    title: 'SW Resource, Timing & Performance Requirements',
+    title: 'SW Performance, Timing & Resource Requirements',
     order: 60,
-    intro: 'Timing and resource constraints stated as requirements: worst-case response time, period/rate, memory/stack budgets, CPU-load ceilings. Targets, not measured results. Derived from System TSR timing.',
+    intro: 'Worst-case response time, throughput, period/activation rate, memory/stack/CPU budgets — stated as requirements (targets, not measurements). Applies to safety and non-safety functions alike.',
     allowsRequirements: true,
     subjectMode: 'element',
-    requirementBudget: { min: 0, max: 60 },
+    requirementBudget: { min: 0, max: 70 },
     checklist: [
-        { id: 'swr1', text: 'Every timing-critical function has a worst-case response-time requirement.' },
-        { id: 'swr2', text: 'Period / activation rate stated for every periodic safety function.' },
-        { id: 'swr3', text: 'Memory and stack budgets stated as requirements where ASIL-relevant.' },
-        { id: 'swr4', text: 'Timing requirements consistent with the FTTI of the parent TSR.',
-          help: 'A SW response-time requirement must leave margin within the Safety Goal FTTI.' },
-        { id: 'swr5', text: 'Each resource requirement derives from a System TSR (Parent System TSR(s)).' }
+        { id: 'swr1', text: 'Every time-critical function (safety or performance) has a worst-case response-time requirement.' },
+        { id: 'swr2', text: 'Period / activation rate stated for every periodic function.' },
+        { id: 'swr3', text: 'Memory, stack and CPU-load budgets stated as requirements where relevant.' },
+        { id: 'swr4', text: 'For safety-classified timing: consistent with the parent\'s FTTI, integrity inherited.' },
+        { id: 'swr5', text: 'Each requirement traces to a System parent.' }
     ]
 });

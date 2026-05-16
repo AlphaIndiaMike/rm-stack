@@ -279,31 +279,82 @@ class DocumentValidator {
      * targetKind is 'sw' or 'hw'; targetChapterIds is the set of chapter
      * ids that count as "a derived requirement in this discipline".
      */
+    /**
+     * SW / HW input-coverage diagnostic — combined parent layer.
+     *
+     * The upstream contract for the SW-RS / HW-RS is BOTH System layers
+     * that can carry a sub-domain portion:
+     *   - ch05_acceptance  (black-box; where QM / non-safety parents live)
+     *   - ch07_elements    (TSR white-box; where safety parents live)
+     * ASPICE SWE.1/HWE.1 is full requirements engineering — safety and
+     * non-safety together — so there is no safety/non-safety split; the
+     * integrity (ASIL/SIL/QM) is an attribute on the requirement.
+     *
+     * Per System parent, this reports:
+     *   - derivedCount: SW/HW requirements (in targetChapterIds) whose
+     *     parentSystemReqs references it.
+     *   - integrity inheritance: there is NO ASIL/SIL decomposition at
+     *     the TSR→SW/HW hop, so a safety-classified parent (asil set and
+     *     not 'QM') must have >=1 derived requirement carrying the EXACT
+     *     same level. Strict equality — a higher child level does not
+     *     satisfy a lower parent, ASIL and SIL never substitute.
+     *
+     * States (mutually exclusive, first match wins):
+     *   gap          allocated to this discipline, nothing derives
+     *   integrityGap derived req(s) exist but none inherits the parent's
+     *                ASIL/SIL (safety parents only)
+     *   advisory     no allocation set and nothing derives (cannot assess)
+     *   covered      derived, and integrity inherited if safety
+     *   notHere      not allocated here and nothing derives
+     */
     systemReqDerivationCoverage(targetKind, targetChapterIds) {
         const allow = new Set(targetChapterIds || []);
-        const tsrs = this.doc.requirements.filter(
-            r => r.chapterId === 'ch07_elements');
-        return tsrs.map(tsr => {
+        const parents = this.doc.requirements.filter(r =>
+            r.chapterId === 'ch05_acceptance' ||
+            r.chapterId === 'ch07_elements');
+        return parents.map(p => {
             const derived = this.doc.requirements.filter(r =>
                 allow.has(r.chapterId) &&
                 Array.isArray(r.parentSystemReqs) &&
-                r.parentSystemReqs.includes(tsr.id));
-            const alloc = (tsr.hwSwAllocation || '').toLowerCase();
-            const allocatedHere =
-                alloc === targetKind || alloc === 'both';
+                r.parentSystemReqs.includes(p.id));
+            const level = (p.asil || '').trim();
+            const isSafety = level !== '' && level !== 'QM';
+            const integrityInherited = !isSafety ||
+                derived.some(r => (r.asil || '').trim() === level);
+            const alloc = (p.hwSwAllocation || '').toLowerCase();
+            const allocatedHere = alloc === targetKind || alloc === 'both';
             const allocUnset = !alloc;
+            const layer = p.chapterId === 'ch07_elements'
+                ? 'TSR' : 'Acceptance';
+
+            let state;
+            if ((allocatedHere || derived.length > 0) && derived.length === 0) {
+                state = 'gap';
+            } else if (derived.length > 0 && !integrityInherited) {
+                state = 'integrityGap';
+            } else if (derived.length === 0 && allocUnset) {
+                state = 'advisory';
+            } else if (derived.length > 0) {
+                state = 'covered';
+            } else {
+                state = 'notHere';
+            }
+
             return {
-                id: tsr.id,
-                statement: GrammarValidator.buildStatement(tsr) || '(incomplete)',
-                asil: tsr.asil || 'QM',
+                id: p.id,
+                layer,
+                statement: GrammarValidator.buildStatement(p) || '(incomplete)',
+                asil: level || 'QM',
+                isSafety,
                 allocation: alloc || '—',
                 allocatedHere,
                 allocUnset,
                 derivedCount: derived.length,
-                // gap: explicitly allocated to this discipline but nothing derives
-                gap: allocatedHere && derived.length === 0,
-                // advisory: allocation not set at all (cannot assess)
-                advisory: allocUnset
+                integrityInherited,
+                state,
+                // legacy flags kept so existing widgets keep working
+                gap: state === 'gap',
+                advisory: state === 'advisory'
             };
         });
     }

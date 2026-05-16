@@ -1,16 +1,15 @@
 /**
  * disciplines/software/sw_assumptions.js
  *
- * SW Chapter 8 — SW Assumptions and Open Points. REUSES chapter id
- * 'ch17_assumptions' so the assumptions store and checklist surface in
- * the System, Item, HW and SW views alike.
+ * SW Chapter 9 — SW Assumptions and Open Points. REUSES chapter id
+ * 'ch17_assumptions' (shared store across all four views).
  */
 
 Chapters.register('software', {
     id: 'ch17_assumptions',
-    number: '8',
+    number: '9',
     title: 'SW Assumptions and Open Points',
-    order: 80,
+    order: 90,
     intro: 'Assumptions the SW requirements depend on but do not enforce — platform, OS/scheduler, hardware behaviour, integration partners. Each owned, tracked, closed.',
     allowsRequirements: false,
     subjectMode: 'none',
