@@ -127,6 +127,13 @@ class Requirement {
         this.parentItemFunctions = data.parentItemFunctions || [];
         this.parentFsrs          = data.parentFsrs || [];
         this.parentAcceptanceReqs= data.parentAcceptanceReqs || [];
+        // parentSystemReqs: array of System TSR (ch07_elements)
+        //   requirement IDs that a HW-SR / SW-SR / HW / SW requirement
+        //   derives from. This is the SW/HW → System spine, the analogue
+        //   of parentAcceptanceReqs for the element layer. ISO 26262-5:6
+        //   / -6:6 derive HW-SR/SW-SR from the Technical Safety
+        //   Requirements (ISO 26262-4:6), not directly from FSRs.
+        this.parentSystemReqs    = data.parentSystemReqs || [];
         this.modeApplicability   = data.modeApplicability || [];
         this.warningStrategy     = data.warningStrategy || '';
         this.degradationStrategy = data.degradationStrategy || '';
@@ -145,6 +152,16 @@ class Requirement {
         this.smart = data.smart || { specific:false, measurable:false, achievable:false, relevant:false, timebound:false };
         // Status
         this.status        = data.status || 'draft';
+        // implemented: tablet-friendly acceptance toggle, flipped from
+        //   the requirement list during acceptance review. Generic —
+        //   present on every requirement in every discipline.
+        this.implemented   = data.implemented === true;
+        // externalId: optional ID of this requirement as stored in an
+        //   external RM tool (Polarion / PTC / DOORS). Carry-and-print
+        //   only — no synchronisation. Part of the requirement form so
+        //   it can be set/changed during normal editing; emitted in
+        //   TXT and PDF export.
+        this.externalId    = data.externalId || '';
         this.createdAt     = data.createdAt || new Date().toISOString();
         this.modifiedAt    = data.modifiedAt || this.createdAt;
     }

@@ -40,23 +40,34 @@ class SummaryView {
         container.appendChild(this._orphansSection(validator));
     }
 
+    /** Requirement Budget — per-discipline committed/ceiling. */
     _budgetSection(validator) {
-        const s = validator.budgetStatus();
-        const div = document.createElement('div');
-        div.className = 'summary-section';
-        const barColor = s.overBudget ? '#dc3545' : s.percent > 80 ? '#fd7e14' : '#198754';
-        const tip = `Total committed requirements vs the ceiling for the selected document class. Going over budget is the cue to split the document into HW-RS / SW-RS.`;
-        div.innerHTML = `
-            <h6>
-                <span>Requirement Budget <span class="help-icon" title="${tip}">?</span></span>
-                <span title="committed / class ceiling">${s.count} / ${s.max}</span>
-            </h6>
-            <div style="height:8px;background:#e9ecef;border-radius:4px;overflow:hidden;" title="${s.percent}% of class ceiling">
-                <div style="height:100%;background:${barColor};width:${Math.min(100, s.percent)}%;"></div>
-            </div>
-            ${s.overBudget ? '<div class="validation-warn" style="margin-top:4px;font-size:11px;">Over budget. Consider splitting to HW/SW docs.</div>' : ''}
-        `;
-        return div;
+        const sectionTip = 'For a budget conscious project the number of requirements must be tracked, as each requirement creates development and verification costs.';
+        const budgets = validator.allDisciplineBudgets();
+        const active = this.doc.discipline;
+
+        const items = budgets.map(b => {
+            const isActive = b.id === active;
+            const barColor = b.overBudget ? '#dc3545'
+                : b.percent > 80 ? '#fd7e14' : '#198754';
+            const text = `
+                <span style="display:block;">
+                    ${isActive ? '▸ ' : ''}${b.label}
+                </span>
+                <span style="display:block;width:130px;height:6px;margin-top:4px;background:#e9ecef;border-radius:3px;overflow:hidden;">
+                    <span style="display:block;height:100%;background:${barColor};width:${Math.min(100, b.percent)}%;"></span>
+                </span>`;
+            return {
+                text,
+                badge: `${b.count} / ${b.max}`,
+                badgeTitle: `${b.percent}% of the ${b.label} ceiling`
+                    + (b.overBudget ? ' — over budget' : ''),
+                cls: b.overBudget ? 'error' : ''
+            };
+        });
+
+        return this._makeList('Requirement Budget', null,
+            items, 'no disciplines', sectionTip);
     }
 
     _elementsSection(validator) {
@@ -147,8 +158,11 @@ class SummaryView {
         const titleHtml = sectionTip
             ? `${title} <span class="help-icon" title="${sectionTip}">?</span>`
             : title;
+        const countHtml = (count == null)
+            ? ''
+            : `<span title="Count">${count}</span>`;
         div.innerHTML = `
-            <h6><span>${titleHtml}</span><span title="Count">${count}</span></h6>
+            <h6><span>${titleHtml}</span>${countHtml}</h6>
             <ul class="summary-list">${itemsHtml}</ul>
         `;
         return div;

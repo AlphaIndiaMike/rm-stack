@@ -103,21 +103,25 @@ class ElementCoverageDiagnostic {
 Chapters.register('system', {
     id: 'ch07_elements',
     number: '6',
-    title: 'Element Requirements (White-Box Layer)',
+    title: 'Technical Safety Requirements (White-Box Layer)',
     order: 80,
-    intro: 'Auto-expands one sub-chapter per declared element. Subject = element name.',
+    intro: 'Technical Safety Concept (ISO 26262-4:6 / ASPICE SYS.3). TSRs refine the black-box acceptance contract against the system architecture and are allocated to architectural elements. Auto-expands one sub-chapter per declared element; subject = element name. Each TSR carries its HW/SW allocation — that allocation is the handoff to the HW-RS / SW-RS documents.',
     allowsRequirements: false,
     subjectMode: 'none',
     autoExpand: 'elements',
     extraWidgets: doc => [new ElementCoverageDiagnostic(doc)],
     checklist: [
-        { id: 'c7a', text: 'Every element has ≥1 requirement.',
-          help: 'The diagnostic above shows the count per element.' },
+        { id: 'c7a', text: 'Every element has ≥1 Technical Safety Requirement.',
+          help: 'The diagnostic above shows the TSR count per element.' },
         { id: 'c7b', text: 'No element exceeds requirement budget (4–13 per leaf).',
           help: '4 is the floor below which the element is under-specified; 13 is the ceiling above which it should be decomposed.' },
         { id: 'c7c', text: 'Expansion ratio from acceptance requirements within 3–15.',
-          help: 'Below 3 = element layer rubber-stamping acceptance; above 15 = element layer taking on HW/SW responsibility.' },
-        { id: 'c7d', text: 'Every requirement passes SMART and predicate/EARS checks.',
+          help: 'Below 3 = TSR layer rubber-stamping acceptance; above 15 = TSR layer taking on HW/SW design responsibility.' },
+        { id: 'c7d', text: 'Every TSR allocated to HW, SW or both (the HW-RS / SW-RS handoff).',
+          help: 'Set "HW/SW allocation" on each TSR. The SW/HW Requirements Inputs chapters flag TSRs allocated to that discipline with nothing deriving from them.' },
+        { id: 'c7e', text: 'Every TSR traces up to a parent acceptance requirement.',
+          help: 'Parent acceptance req(s) attribute. Keeps the SG → FSR → acceptance → TSR chain closed.' },
+        { id: 'c7f', text: 'Every TSR passes SMART and predicate/EARS checks.',
           help: 'The builder validates both as you type.' }
     ]
 });

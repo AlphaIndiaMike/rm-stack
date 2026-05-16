@@ -133,5 +133,7 @@ function renderAll() {
     const counter = document.getElementById('budgetCounter');
     counter.textContent = `${s.count} / ${s.max}`;
     counter.className = 'badge ' + (s.overBudget ? 'bg-danger' : s.percent > 80 ? 'bg-warning text-dark' : 'bg-secondary');
-    counter.title = `Total committed requirements (${s.count}) vs the document-class ceiling (${s.max}). Going over budget is the cue to split into HW-RS / SW-RS documents.`;
+    const ds = validator.disciplineBudgetStatus(doc.discipline);
+    const discLabel = (Disciplines.get(doc.discipline) || {}).label || doc.discipline;
+    counter.title = `Total committed requirements (${s.count}) vs the document-class ceiling (${s.max}). Going over budget is the cue to split into HW-RS / SW-RS documents.\n\nActive discipline — ${discLabel}: ${ds.count} / ${ds.max}. Per-discipline breakdown is in the right-pane Requirement Budget panel.`;
 }

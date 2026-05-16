@@ -225,6 +225,49 @@ html, body {
 .req-badge.asil-b { background: #ffc107; color: #333; }
 .req-badge.asil-a { background: #0dcaf0; color: #333; }
 .req-badge.asil-qm { background: #6c757d; color: white; }
+
+/* Implemented / accepted toggle on each requirement row. Sized for a
+   comfortable tap target on a tablet during acceptance review. */
+.impl-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+.impl-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.impl-slider {
+    position: relative;
+    width: 42px;
+    height: 24px;
+    background: #ced4da;
+    border-radius: 24px;
+    transition: background 0.15s ease;
+    flex: 0 0 auto;
+}
+.impl-slider::before {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 20px;
+    height: 20px;
+    background: #fff;
+    border-radius: 50%;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    transition: transform 0.15s ease;
+}
+.impl-switch input:checked + .impl-slider { background: #198754; }
+.impl-switch input:checked + .impl-slider::before { transform: translateX(18px); }
+.impl-switch input:focus-visible + .impl-slider { outline: 2px solid #0d6efd; outline-offset: 2px; }
+.impl-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #6c757d;
+    min-width: 76px;
+}
+.impl-switch input:checked ~ .impl-label { color: #198754; }
 .req-delete {
     background: none;
     border: none;

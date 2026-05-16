@@ -33,6 +33,6 @@ Chapters.register('system', {
           help: 'SPFM ≥97% (D)/90% (C); PMHF ≤1e-8/h (D), ≤1e-7/h (C). ISO 26262-5 Annex F.' },
         { id: 'c10c', text: 'Reference to HW development document with version.' },
         { id: 'c10d', text: 'Every HW-SR traces to a parent TSR.',
-          help: 'Use the Parent FSR(s) attribute on each HW-SR to record the trace.' }
+          help: 'Use the Parent System TSR(s) attribute on each HW-SR to record the trace (ch07 Technical Safety Requirements).' }
     ]
 });

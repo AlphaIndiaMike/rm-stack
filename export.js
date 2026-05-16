@@ -23,6 +23,8 @@
  */
 
 const ATTR_DEFS = [
+    // Identity / external reference
+    { key: 'externalId',         label: 'External ID' },
     // Predicate-specific slots
     { key: 'conditional',        label: 'Conditional' },
     { key: 'conditionalText',    label: 'Conditional text' },
@@ -64,6 +66,9 @@ const ATTR_DEFS = [
     { key: 'modes',              label: 'Modes',              list: true },
     { key: 'interfaceRefs',      label: 'Interface refs',     list: true },
     { key: 'hwSwAllocation',     label: 'HW/SW allocation' },
+    { key: 'parentSystemReqs',   label: 'Parent System TSR(s)', list: true },
+    { key: 'dcTarget',           label: 'DC target' },
+    { key: 'implemented',        label: 'Implemented' },
     { key: 'status',             label: 'Status' }
 ];
 
@@ -196,6 +201,7 @@ class Exporter {
         let any = false;
         ATTR_DEFS.forEach(({ key, label, list }) => {
             let v = req[key];
+            if (typeof v === 'boolean') { if (!v) return; v = 'Yes'; }
             if (v == null || v === '') return;
             if (list) {
                 if (!Array.isArray(v) || v.length === 0) return;
@@ -327,6 +333,7 @@ function renderReqHtml(req) {
     const rows = [];
     ATTR_DEFS.forEach(({ key, label, list }) => {
         let v = req[key];
+        if (typeof v === 'boolean') { if (!v) return; v = 'Yes'; }
         if (v == null || v === '') return;
         if (list) { if (!Array.isArray(v) || v.length === 0) return; v = v.join(', '); }
         rows.push(`<tr><th>${esc(label)}</th><td>${esc(v)}</td></tr>`);

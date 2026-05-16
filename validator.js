@@ -29,7 +29,8 @@ class DocumentValidator {
         return 'red';
     }
 
-    /** Total requirement count vs class budget. */
+    /** Total requirement count vs class budget. Unchanged — this is the
+     *  "applies overall" number shown in the top bar. */
     budgetStatus() {
         const total = this.doc.requirements.length;
         const budget = CLASS_BUDGETS[this.doc.docClass] || CLASS_BUDGETS.complex;
@@ -39,6 +40,52 @@ class DocumentValidator {
             overBudget: total > budget.max,
             percent: Math.round((total / budget.max) * 100)
         };
+    }
+
+    /** Per-discipline budget. Sits next to the overall budget, it does
+     *  not replace it.
+     *
+     *  Ceiling: the System discipline resolves to the document-class
+     *  ceiling (the existing, happy-with-it number); the other three
+     *  scale off it via DISCIPLINE_BUDGET_FACTORS (item 1/3, hw/sw 3x).
+     *
+     *  Count: requirements whose chapter is in this discipline's outline.
+     *  The outline is the same partition the editor and exporter use, so
+     *  the count matches exactly what the user can see and edit in that
+     *  discipline's view. Chapters shared between disciplines (e.g.
+     *  ch04_fsc in Item and System, ch10_hw in System and Hardware)
+     *  count toward every discipline that surfaces them — consistent
+     *  with the one-JSON-four-views rule: the budget is a view too. */
+    disciplineBudgetStatus(disciplineId) {
+        const systemMax =
+            (CLASS_BUDGETS[this.doc.docClass] || CLASS_BUDGETS.complex).max;
+        const factor = DISCIPLINE_BUDGET_FACTORS[disciplineId] != null
+            ? DISCIPLINE_BUDGET_FACTORS[disciplineId]
+            : 1;
+        const max = Math.round(systemMax * factor);
+        const chapterIds = new Set(
+            (Chapters.outline(disciplineId) || []).map(c => c.id));
+        const count = this.doc.requirements.filter(
+            r => chapterIds.has(r.chapterId)).length;
+        return {
+            discipline: disciplineId,
+            count,
+            max,
+            factor,
+            overBudget: count > max,
+            percent: max > 0 ? Math.round((count / max) * 100) : 0
+        };
+    }
+
+    /** Budget status for every registered discipline, in outline order.
+     *  Used by the right-pane summary to show the whole picture at a
+     *  glance. */
+    allDisciplineBudgets() {
+        return Disciplines.all().map(d => ({
+            id: d.id,
+            label: d.label,
+            ...this.disciplineBudgetStatus(d.id)
+        }));
     }
 
     /** Orphan report — requirements referencing undeclared things.
@@ -197,14 +244,19 @@ class DocumentValidator {
         });
     }
 
-    /** Requirements with validation errors/warnings. */
+    /** Requirements with validation errors/warnings. Skips requirements
+     *  whose chapter is not in the active discipline's outline — those
+     *  are either cross-discipline rows (one-JSON, many-views) or rows
+     *  stranded by a removed chapter; either way they are not visible in
+     *  this view, so flagging them here would be noise (and findChapter
+     *  would hand validate() an empty subject context). */
     requirementIssues() {
         const issues = [];
         this.doc.requirements.forEach(req => {
+            const chapter = findChapter(this.doc.discipline, req.chapterId);
+            if (!chapter) return;
             const ctx = {
-                declaredSubjects: this.doc.declaredSubjectsForChapter(
-                    findChapter(this.doc.discipline, req.chapterId)
-                )
+                declaredSubjects: this.doc.declaredSubjectsForChapter(chapter)
             };
             const { errors, warnings } = GrammarValidator.validate(req, ctx);
             if (errors.length || warnings.length) {
@@ -212,6 +264,48 @@ class DocumentValidator {
             }
         });
         return issues;
+    }
+
+    /**
+     * SW / HW input-coverage diagnostic. The System Technical Safety
+     * Requirements (chapterId 'ch07_elements') are the upstream contract
+     * for the HW-RS and SW-RS documents. This reports, per TSR:
+     *   - its hwSwAllocation (hw / sw / both / — unset)
+     *   - how many requirements in `targetChapterIds` derive from it
+     *     (via parentSystemReqs back-reference)
+     *   - a gap flag when the TSR is allocated to this discipline but
+     *     nothing here derives from it.
+     *
+     * targetKind is 'sw' or 'hw'; targetChapterIds is the set of chapter
+     * ids that count as "a derived requirement in this discipline".
+     */
+    systemReqDerivationCoverage(targetKind, targetChapterIds) {
+        const allow = new Set(targetChapterIds || []);
+        const tsrs = this.doc.requirements.filter(
+            r => r.chapterId === 'ch07_elements');
+        return tsrs.map(tsr => {
+            const derived = this.doc.requirements.filter(r =>
+                allow.has(r.chapterId) &&
+                Array.isArray(r.parentSystemReqs) &&
+                r.parentSystemReqs.includes(tsr.id));
+            const alloc = (tsr.hwSwAllocation || '').toLowerCase();
+            const allocatedHere =
+                alloc === targetKind || alloc === 'both';
+            const allocUnset = !alloc;
+            return {
+                id: tsr.id,
+                statement: GrammarValidator.buildStatement(tsr) || '(incomplete)',
+                asil: tsr.asil || 'QM',
+                allocation: alloc || '—',
+                allocatedHere,
+                allocUnset,
+                derivedCount: derived.length,
+                // gap: explicitly allocated to this discipline but nothing derives
+                gap: allocatedHere && derived.length === 0,
+                // advisory: allocation not set at all (cannot assess)
+                advisory: allocUnset
+            };
+        });
     }
 
     /**

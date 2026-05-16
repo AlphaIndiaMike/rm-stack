@@ -76,3 +76,29 @@ const CLASS_BUDGETS = {
     complex: { max: 300, label: 'Complex' },
     adas:    { max: 400, label: 'ADAS Platform' }
 };
+
+/** Per-discipline requirement budgets, expressed as a factor of the
+ *  System ceiling (CLASS_BUDGETS[docClass].max).
+ *
+ *  The System discipline IS the existing class ceiling (factor 1) — that
+ *  mechanic is untouched, it stays driven by the Class dropdown. The
+ *  other three scale off whatever System resolves to:
+ *
+ *    item     1/3 — concept layer (Item Definition + HARA + FSC). A
+ *                   third of System: it states goals and the safety
+ *                   concept, not the full system contract.
+ *    system   1   — the existing, tuned ceiling. Do not retune here;
+ *                   retune via CLASS_BUDGETS so System stays the anchor.
+ *    hardware 3   — HW-RS decomposes the System contract into far more
+ *    software 3     detail (component design, FMEDA, units, ...), so the
+ *                   spec legitimately runs ~3x the System count.
+ *
+ *  These are the initial limits and the single place to retune them.
+ *  Edit a factor here; the validator and both budget readouts pick it
+ *  up. A missing entry falls back to factor 1 (same as System). */
+const DISCIPLINE_BUDGET_FACTORS = {
+    item:     1 / 3,
+    system:   1,
+    hardware: 3,
+    software: 3
+};

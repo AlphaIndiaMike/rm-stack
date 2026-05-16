@@ -380,9 +380,16 @@ class EditorView {
         const panel = document.createElement('div');
         panel.className = 'req-attributes';
         const ch = this.currentChapter ? this.currentChapter.id : '';
+        const disc = this.doc.discipline;
 
         panel.appendChild(this._makeInputSlot('Rationale *', this.draftReq.rationale,
             v => { this.draftReq.rationale = v; this._refreshPreview(wrap); }, 'Why this requirement exists'));
+
+        // External RM ID (Polarion / PTC / DOORS). Optional, generic to
+        // every chapter and discipline. Carry-and-print only — no sync.
+        panel.appendChild(this._makeInputSlot('External ID (optional)', this.draftReq.externalId,
+            v => { this.draftReq.externalId = v; this._refreshPreview(wrap); },
+            'ID in Polarion / PTC / DOORS — printed in export, not synced'));
 
         const asilOpts = [{value:'',label:'— select —'},
                           ...GRAMMAR.asilLevels.map(a => ({value: a, label: a}))];
@@ -458,13 +465,49 @@ class EditorView {
             panel.appendChild(this._makeSelectSlot('Safe state ref', this._safeStateOptions(),
                 this.draftReq.safeStateRef,
                 v => { this.draftReq.safeStateRef = v; this._refreshPreview(wrap); }));
+            panel.appendChild(this._makeSelectSlot('HW/SW allocation', [
+                    { value: '',     label: '— not set —' },
+                    { value: 'hw',   label: 'HW' },
+                    { value: 'sw',   label: 'SW' },
+                    { value: 'both', label: 'Both HW & SW' }
+                ], this.draftReq.hwSwAllocation,
+                v => { this.draftReq.hwSwAllocation = v; this._refreshPreview(wrap); }));
         }
         else if (ch === 'ch10_hw' || ch === 'ch11_sw') {
-            this._mountMultiSelectAttr(panel, 'Parent FSR(s)', 'parentFsrs',
-                this.doc.requirementsForChapter('ch04_fsc').map(r => ({
+            // HW-SR / SW-SR derive from the System Technical Safety
+            // Requirements (ch07), not directly from FSRs — ISO 26262-5:6
+            // / -6:6. Safety chapters also collect a DC target + safe
+            // state for the diagnostic path.
+            this._mountMultiSelectAttr(panel, 'Parent System TSR(s) *', 'parentSystemReqs',
+                this.doc.requirementsForChapter('ch07_elements').map(r => ({
                     value: r.id, label: `${r.id} — ${(r.statement || '').slice(0, 60) || '(no statement)'}`
-                })), 'No FSRs declared yet.');
+                })), 'No System TSRs yet — author them in the System discipline (Chapter 6).');
             panel.appendChild(this._makeSelectSlot('ASIL *', asilOpts, this.draftReq.asil,
+                v => { this.draftReq.asil = v; this._refreshPreview(wrap); }));
+            panel.appendChild(this._makeInputSlot('Diagnostic Coverage (DC) target', this.draftReq.dcTarget,
+                v => { this.draftReq.dcTarget = v; this._refreshPreview(wrap); },
+                'e.g. 90%, 99% — per ISO 26262-5:8 / -6:6'));
+            panel.appendChild(this._makeSelectSlot('Safe state ref', this._safeStateOptions(),
+                this.draftReq.safeStateRef,
+                v => { this.draftReq.safeStateRef = v; this._refreshPreview(wrap); }));
+            panel.appendChild(this._makeSelectSlot('Verification method *', verifOpts,
+                this.draftReq.verification,
+                v => { this.draftReq.verification = v; this._refreshPreview(wrap); }));
+            panel.appendChild(this._makeInputSlot('Pass criterion', this.draftReq.passCriterion,
+                v => { this.draftReq.passCriterion = v; this._refreshPreview(wrap); }));
+        }
+        else if (ch === 'sw_functional' || ch === 'sw_interface' || ch === 'sw_resource'
+              || ch === 'hw_functional' || ch === 'hw_interface' || ch === 'hw_resource'
+              || (ch === 'ch13_calibration' && disc === 'software')
+              || (ch === 'ch09_hsi' && (disc === 'software' || disc === 'hardware'))) {
+            // SW/HW non-safety requirement chapters: the spine is the
+            // parent System TSR. Allocation is derived from this
+            // reference (A2) — no allocation matrix.
+            this._mountMultiSelectAttr(panel, 'Parent System TSR(s) *', 'parentSystemReqs',
+                this.doc.requirementsForChapter('ch07_elements').map(r => ({
+                    value: r.id, label: `${r.id} — ${(r.statement || '').slice(0, 60) || '(no statement)'}`
+                })), 'No System TSRs yet — author them in the System discipline (Chapter 6).');
+            panel.appendChild(this._makeSelectSlot('ASIL', asilOpts, this.draftReq.asil,
                 v => { this.draftReq.asil = v; this._refreshPreview(wrap); }));
             panel.appendChild(this._makeSelectSlot('Verification method *', verifOpts,
                 this.draftReq.verification,
@@ -646,19 +689,27 @@ class EditorView {
             item.innerHTML = `
                 <div class="req-item-header">
                     <span class="req-id" title="Internal stable ID.">${req.id} ${statusDot}</span>
-                    <span>
+                    <span style="display:flex;align-items:center;gap:10px;">
+                        <label class="impl-switch" title="Mark this requirement implemented / accepted. Flip during acceptance review.">
+                            <input type="checkbox" class="req-impl" ${req.implemented ? 'checked' : ''}>
+                            <span class="impl-slider"></span>
+                            <span class="impl-label">${req.implemented ? 'Implemented' : 'Open'}</span>
+                        </label>
                         <button class="req-edit" title="Edit" style="background:none;border:none;color:#0d6efd;cursor:pointer;font-size:13px;padding:0 6px;">✎ Edit</button>
                         <button class="req-delete" title="Delete">✕</button>
                     </span>
                 </div>
                 <div>${req.statement}</div>
                 <div class="req-badges">
+                    ${req.externalId ? `<span class="req-badge" style="background:#e7f1ff;color:#0a58ca;" title="External RM tool ID (Polarion / PTC). Not synced.">ext: ${req.externalId}</span>` : ''}
                     ${req.asil ? `<span class="req-badge ${asilClass}" title="${(asilTitles[req.asil] || 'Safety integrity level').replace(/"/g,'&quot;')}">${req.asil}</span>` : ''}
                     ${req.verification ? `<span class="req-badge" title="Verification method.">Verif: ${req.verification}</span>` : ''}
+                    ${req.dcTarget ? `<span class="req-badge" title="Diagnostic Coverage target.">DC ${req.dcTarget}</span>` : ''}
                     ${req.parentSG ? `<span class="req-badge" title="Parent Safety Goal.">→ ${this.doc.nameForId(req.parentSG)}</span>` : ''}
                     ${req.safeStateRef ? `<span class="req-badge" title="Safe state.">SS: ${this.doc.nameForId(req.safeStateRef)}</span>` : ''}
                     ${req.ftti ? `<span class="req-badge" title="FTTI.">FTTI ${req.ftti}</span>` : ''}
                     ${req.fttiContribution ? `<span class="req-badge" title="FTTI contribution.">FTTI+ ${req.fttiContribution}</span>` : ''}
+                    ${(req.parentSystemReqs || []).map(id => `<span class="req-badge" title="Parent System TSR.">⟸ TSR ${this.doc.nameForId(id)}</span>`).join('')}
                     ${(req.parentFsrs || []).map(id => `<span class="req-badge" title="Parent FSR.">⟵ FSR ${this.doc.nameForId(id)}</span>`).join('')}
                     ${(req.parentAcceptanceReqs || []).map(id => `<span class="req-badge" title="Parent acceptance.">⟵ Acc ${this.doc.nameForId(id)}</span>`).join('')}
                     ${(req.parentItemFunctions || []).map(id => `<span class="req-badge" title="Item function.">fn ${this.doc.nameForId(id)}</span>`).join('')}
@@ -668,6 +719,12 @@ class EditorView {
                 </div>
                 ${req.rationale ? `<div style="font-size:11px;color:#666;margin-top:0.3rem;"><em>Rationale:</em> ${req.rationale}</div>` : ''}
             `;
+            const implEl = item.querySelector('.req-impl');
+            implEl.addEventListener('change', e => {
+                req.implemented = e.target.checked;
+                req.modifiedAt = new Date().toISOString();
+                this.onChange();
+            });
             item.querySelector('.req-edit').addEventListener('click', () => {
                 this.draftReq = req;
                 this.editingExisting = true;

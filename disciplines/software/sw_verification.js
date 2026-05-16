@@ -1,16 +1,21 @@
 /**
- * disciplines/hardware/hw_verification.js
+ * disciplines/software/sw_verification.js
  *
- * HW Chapter 8 — HW Requirements Verification & Status. NOT a test
- * tool. Verification-method coverage + per-requirement acceptance
- * status (the `implemented` toggle) + the System TSR → HW requirement
- * trace. Mirrors disciplines/software/sw_verification.js.
+ * SW Chapter 9 — SW Requirements Verification & Status. NOT a test
+ * tool. Two things only:
+ *   1. Each SW requirement already carries a verification method
+ *      attribute (review / analysis / test / ...). This chapter
+ *      reports method coverage and the per-requirement acceptance
+ *      status (the `implemented` toggle flipped from any requirement
+ *      list — e.g. on a tablet during acceptance).
+ *   2. An auto trace report: System TSR → SW requirement → status,
+ *      the SW analogue of the System Traceability chapter.
  */
 
-const HW_TRACE_CHAPTERS =
-    ['hw_functional', 'hw_interface', 'ch10_hw', 'hw_resource'];
+const SW_TRACE_CHAPTERS =
+    ['sw_functional', 'sw_interface', 'ch11_sw', 'sw_resource', 'ch13_calibration'];
 
-class HwTraceStatusReport {
+class SwTraceStatusReport {
 
     constructor(doc) { this.doc = doc; }
     setDocument(doc) { this.doc = doc; }
@@ -18,32 +23,32 @@ class HwTraceStatusReport {
     render(container) {
         const wrap = document.createElement('div');
         wrap.className = 'requirements-section';
-        wrap.innerHTML = `<div class="section-title">HW Trace & Acceptance Status (auto-generated)
-            <span class="help-icon" title="System TSR → HW requirement → verification method → implemented. The implemented flag is the toggle on each requirement row; flip it during acceptance.">?</span>
+        wrap.innerHTML = `<div class="section-title">SW Trace & Acceptance Status (auto-generated)
+            <span class="help-icon" title="System TSR → SW requirement → verification method → implemented. The implemented flag is the toggle on each requirement row; flip it during acceptance.">?</span>
         </div>`;
 
-        const hwReqs = this.doc.requirements.filter(
-            r => HW_TRACE_CHAPTERS.includes(r.chapterId));
+        const swReqs = this.doc.requirements.filter(
+            r => SW_TRACE_CHAPTERS.includes(r.chapterId));
 
-        if (hwReqs.length === 0) {
+        if (swReqs.length === 0) {
             const empty = document.createElement('div');
             empty.className = 'empty-state';
-            empty.textContent = 'No HW requirements authored yet.';
+            empty.textContent = 'No SW requirements authored yet.';
             wrap.appendChild(empty);
             container.appendChild(wrap);
             return;
         }
 
-        const total = hwReqs.length;
-        const withMethod = hwReqs.filter(r => r.verification).length;
-        const traced = hwReqs.filter(r =>
+        const total = swReqs.length;
+        const withMethod = swReqs.filter(r => r.verification).length;
+        const traced = swReqs.filter(r =>
             Array.isArray(r.parentSystemReqs) && r.parentSystemReqs.length > 0).length;
-        const implemented = hwReqs.filter(r => r.implemented).length;
+        const implemented = swReqs.filter(r => r.implemented).length;
 
         const summary = document.createElement('div');
         summary.className = 'chapter-intro';
         summary.innerHTML = `
-            <strong>${total}</strong> HW requirement(s) &nbsp;·&nbsp;
+            <strong>${total}</strong> SW requirement(s) &nbsp;·&nbsp;
             <strong>${traced}</strong> traced to a System TSR &nbsp;·&nbsp;
             <strong>${withMethod}</strong> with a verification method &nbsp;·&nbsp;
             <strong style="color:${implemented === total ? '#198754' : '#fd7e14'};">${implemented}/${total}</strong> marked implemented
@@ -55,10 +60,10 @@ class HwTraceStatusReport {
         const cols = '110px 1fr 1.1fr 100px 110px';
         const head = document.createElement('div');
         head.style.cssText = `display:grid;grid-template-columns:${cols};gap:0.4rem;padding:0.5rem 0.75rem;background:#f8f9fa;font-size:11px;text-transform:uppercase;color:#666;font-weight:600;border-bottom:1px solid #dee2e6;`;
-        head.innerHTML = `<div>HW Req</div><div>Statement</div><div>Parent TSR(s)</div><div>Verif</div><div>Implemented</div>`;
+        head.innerHTML = `<div>SW Req</div><div>Statement</div><div>Parent TSR(s)</div><div>Verif</div><div>Implemented</div>`;
         table.appendChild(head);
 
-        hwReqs.forEach(r => {
+        swReqs.forEach(r => {
             const parents = (r.parentSystemReqs || []).join(', ') || '— none —';
             const stmt = GrammarValidator.buildStatement(r) || '(incomplete)';
             const row = document.createElement('div');
@@ -80,21 +85,21 @@ class HwTraceStatusReport {
     }
 }
 
-Chapters.register('hardware', {
-    id: 'hw_verification',
-    number: '8',
-    title: 'HW Requirements Verification & Status',
-    order: 80,
-    intro: 'Auto-generated. Verification-method coverage and per-requirement acceptance status (the implemented toggle on each requirement row), plus the System TSR → HW requirement trace. Not a test tool.',
+Chapters.register('software', {
+    id: 'sw_verification',
+    number: '9',
+    title: 'SW Requirements Verification & Status',
+    order: 90,
+    intro: 'Auto-generated. Verification-method coverage and per-requirement acceptance status (the implemented toggle on each requirement row), plus the System TSR → SW requirement trace. Not a test tool.',
     allowsRequirements: false,
     subjectMode: 'none',
-    extraWidgets: doc => [new HwTraceStatusReport(doc)],
+    extraWidgets: doc => [new SwTraceStatusReport(doc)],
     checklist: [
-        { id: 'hv1', text: 'Every HW requirement has a verification method assigned.' },
-        { id: 'hv2', text: 'Every HW requirement traces to a parent System TSR.' },
-        { id: 'hv3', text: 'Acceptance status reviewed: implemented requirements toggled on.',
+        { id: 'sv1', text: 'Every SW requirement has a verification method assigned.' },
+        { id: 'sv2', text: 'Every SW requirement traces to a parent System TSR.' },
+        { id: 'sv3', text: 'Acceptance status reviewed: implemented requirements toggled on.',
           help: 'Flip the implemented toggle on each requirement row as you accept it.' },
-        { id: 'hv4', text: 'External RM IDs (Polarion / PTC) filled where the requirement was mirrored.',
+        { id: 'sv4', text: 'External RM IDs (Polarion / PTC) filled where the requirement was mirrored.',
           help: 'Optional External ID field on each requirement — carry/print only, no sync.' }
     ]
 });
