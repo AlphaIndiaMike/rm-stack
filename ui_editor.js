@@ -25,6 +25,13 @@
  * once the click-twice / focus regressions are unlikely to recur.
  */
 
+// Deterministic, process-local counter for transient <datalist> element
+// ids. Not a data id and never persisted, but kept entropy-free for the
+// same reason the model ids are: two datalists for the same lexCategory
+// rendered together must never collide on their DOM id (a collision
+// would mis-wire which input shows which autocomplete list).
+let _datalistSeq = 0;
+
 class EditorView {
 
     constructor(doc, onChange) {
@@ -804,7 +811,7 @@ class EditorView {
         if (lexCategory && this.doc && this.doc.lexicon
                 && Array.isArray(this.doc.lexicon[lexCategory])
                 && this.doc.lexicon[lexCategory].length > 0) {
-            const listId = `lex-${lexCategory}-${Math.random().toString(36).slice(2,8)}`;
+            const listId = `lex-${lexCategory}-${++_datalistSeq}`;
             listAttr = ` list="${listId}"`;
             const opts = this.doc.lexicon[lexCategory]
                 .map(v => `<option value="${String(v).replace(/"/g,'&quot;')}">`).join('');

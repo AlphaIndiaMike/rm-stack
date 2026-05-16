@@ -47,6 +47,33 @@ const ID_PREFIX = {
 };
 
 /**
+ * Provisional fallback ID generator. There is intentionally NO
+ * randomness anywhere in the ID system: real IDs are the zero-padded
+ * sequential ones from SyrsDocument.nextId(kind), and this fallback —
+ * used only when an object is constructed outside the document factory
+ * before nextId() overwrites .id — is a deterministic, process-local
+ * monotonic counter, never an entropy source.
+ *
+ * Format: `PREFIX-TMP######` (e.g. REQ-TMP000001). Properties:
+ *   - zero entropy: pure increment, no Math.random, no birthday risk;
+ *   - unique per construction, so even an un-overwritten value cannot
+ *     collide with another;
+ *   - the `TMP` marker makes a leaked provisional ID glaringly visible
+ *     in saved JSON / exports (greppable), instead of masquerading as
+ *     a plausible random ID;
+ *   - does not match the `^PREFIX-\d+$` sequence regex in
+ *     _seedIdCounters, so it can never perturb the real counter.
+ *
+ * Every static generateId() delegates here. Real allocation is still
+ * SyrsDocument.nextId(kind) and is unchanged.
+ */
+let _provisionalIdSeq = 0;
+function provisionalId(prefix) {
+    _provisionalIdSeq += 1;
+    return prefix + '-TMP' + String(_provisionalIdSeq).padStart(6, '0');
+}
+
+/**
  * Migrate a legacy single-letter ASIL value to the prefixed form
  * introduced when SIL support landed. 'A'..'D' → 'ASIL-A'..'ASIL-D'.
  * 'QM' and already-prefixed values pass through unchanged. Empty/null
@@ -172,7 +199,7 @@ class Requirement {
      * are assigned by SyrsDocument.nextId(kind) at commit time.
      */
     static generateId() {
-        return 'REQ-' + Math.random().toString(36).substr(2, 6).toUpperCase();
+        return provisionalId('REQ');
     }
 
     get statement() {
@@ -215,7 +242,7 @@ class Element {
         // SW-specific.
         this.programmingLang = data.programmingLang || '';
     }
-    static generateId() { return 'ELEM-' + Math.random().toString(36).substr(2, 5).toUpperCase(); }
+    static generateId() { return provisionalId('ELEM'); }
     toJSON() {
         // _depth is a transient render-time tag (see elementsInTreeOrder)
         // and must not be persisted.
@@ -233,7 +260,7 @@ class ItemFunction {
         this.description = data.description || '';
         this.activeModes = data.activeModes || [];
     }
-    static generateId() { return 'ITEMF-' + Math.random().toString(36).substr(2, 4).toUpperCase(); }
+    static generateId() { return provisionalId('ITEMF'); }
     toJSON() { return Object.assign({}, this); }
 }
 
@@ -253,7 +280,7 @@ class SafetyGoal {
         this.ftti      = data.ftti || '';
         this.emergencyInterval = data.emergencyInterval || '';
     }
-    static generateId() { return 'SG-' + Math.random().toString(36).substr(2, 4).toUpperCase(); }
+    static generateId() { return provisionalId('SG'); }
     toJSON() { return Object.assign({}, this); }
 }
 
@@ -285,7 +312,7 @@ class SafeState {
         this.modeRefs    = data.modeRefs || [];
         this.sgRefs      = data.sgRefs || [];
     }
-    static generateId() { return 'SS-' + Math.random().toString(36).substr(2, 4).toUpperCase(); }
+    static generateId() { return provisionalId('SS'); }
     toJSON() { return Object.assign({}, this); }
 }
 
@@ -298,7 +325,7 @@ class Mode {
         this.description = data.description || '';
         this.isSafeState = !!data.isSafeState;
     }
-    static generateId() { return 'MODE-' + Math.random().toString(36).substr(2, 4).toUpperCase(); }
+    static generateId() { return provisionalId('MODE'); }
     toJSON() { return Object.assign({}, this); }
 }
 
@@ -325,7 +352,7 @@ class ModeTransition {
         this.guard          = data.guard || '';
         this.transitionTime = data.transitionTime || '';
     }
-    static generateId() { return 'TR-' + Math.random().toString(36).substr(2, 4).toUpperCase(); }
+    static generateId() { return provisionalId('TR'); }
     toJSON() { return Object.assign({}, this); }
 }
 
@@ -353,7 +380,7 @@ class InterfaceSpec {
         this.failureBehavior = data.failureBehavior || '';
         this.notes     = data.notes || '';
     }
-    static generateId() { return 'IF-' + Math.random().toString(36).substr(2, 5).toUpperCase(); }
+    static generateId() { return provisionalId('IF'); }
     toJSON() { return Object.assign({}, this); }
 }
 
@@ -367,7 +394,7 @@ class Assumption {
         this.status = data.status || 'open';
         this.closureTarget = data.closureTarget || '';
     }
-    static generateId() { return 'AOU-' + Math.random().toString(36).substr(2, 4).toUpperCase(); }
+    static generateId() { return provisionalId('AOU'); }
     toJSON() { return Object.assign({}, this); }
 }
 
@@ -390,7 +417,7 @@ class FailureMode {
         this.classification     = data.classification || '';    // safe / single-point / residual / multi-point latent / multi-point detected
         this.mitigation         = data.mitigation || '';        // safety mechanism reference
     }
-    static generateId() { return 'FM-' + Math.random().toString(36).substr(2, 4).toUpperCase(); }
+    static generateId() { return provisionalId('FM'); }
     toJSON() { return Object.assign({}, this); }
 }
 
@@ -449,7 +476,7 @@ class HsiSignal {
         this.producerElementId = data.producerElementId || '';
         this.consumerElementId = data.consumerElementId || '';
     }
-    static generateId() { return 'HSI-' + Math.random().toString(36).substr(2, 4).toUpperCase(); }
+    static generateId() { return provisionalId('HSI'); }
     toJSON() { return Object.assign({}, this); }
 }
 
