@@ -50,6 +50,11 @@ class DocumentValidator {
         const orphans = [];
         const declaredElementNames = new Set(this.doc.elements.map(e => e.name));
         const declaredElementIds   = new Set(this.doc.elements.map(e => e.id));
+        // Declared interfaces are also legitimate subjects: an interface-
+        // definition (HSI) requirement says "the CAN_PT shall define
+        // signal X ..." where the subject is the interface itself.
+        const declaredInterfaceNames = new Set(
+            (this.doc.interfaces || []).map(i => i.name).filter(Boolean));
         const declaredFunctions    = new Set(this.doc.itemFunctions.map(f => f.id));
         const declaredSGs          = new Set(this.doc.safetyGoals.map(g => g.id));
         const declaredModes        = new Set(this.doc.modes.map(m => m.id));
@@ -59,9 +64,16 @@ class DocumentValidator {
         const push = (req, issue) => orphans.push({ id: req.id, issue });
 
         this.doc.requirements.forEach(req => {
-            // Subject must be declared (or "the system")
-            if (req.subject && req.subject !== 'the system' && !declaredElementNames.has(req.subject)) {
-                push(req, `Subject "${req.subject}" not a declared element`);
+            // Subject must be declared: "the system", a declared element,
+            // a declared interface (HSI requirements), or the literal
+            // "the HSI" the generator falls back to when a signal has
+            // no parent interface.
+            if (req.subject &&
+                req.subject !== 'the system' &&
+                req.subject !== 'the HSI' &&
+                !declaredElementNames.has(req.subject) &&
+                !declaredInterfaceNames.has(req.subject)) {
+                push(req, `Subject "${req.subject}" not a declared element or interface`);
             }
             // parentSG if present must resolve
             if (req.parentSG && !declaredSGs.has(req.parentSG)) {

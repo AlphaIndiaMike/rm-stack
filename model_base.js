@@ -108,6 +108,7 @@ class Requirement {
         this.signalName       = data.signalName || '';
         this.pin              = data.pin || '';
         this.signalProperties = data.signalProperties || '';
+        this.signalConsumer   = data.signalConsumer || '';
         this.signalTiming     = data.signalTiming || '';
         this.signalFailure    = data.signalFailure || '';
         // Attributes
@@ -423,6 +424,13 @@ class HsiSignal {
         this.failureBehavior = data.failureBehavior || '';
         this.diagnostic      = data.diagnostic || '';
         this.notes           = data.notes || '';
+        // Signal allocation — which element produces/consumes this
+        // signal. Optional at the System level; refined in the HW and
+        // SW disciplines later (HW-port and SW-unit specifics). Both
+        // are ELEM IDs (system-kind elements) so a signal is captured
+        // as "signal X goes from Subsystem A to Subsystem B".
+        this.producerElementId = data.producerElementId || '';
+        this.consumerElementId = data.consumerElementId || '';
     }
     static generateId() { return 'HSI-' + Math.random().toString(36).substr(2, 4).toUpperCase(); }
     toJSON() { return Object.assign({}, this); }
@@ -713,6 +721,18 @@ class SyrsDocument {
         if (chapter.subjectMode === 'system') return ['the system'];
         if (chapter.subjectMode === 'element') {
             return this.elements.map(e => e.name).filter(Boolean);
+        }
+        // HSI: an interface-definition requirement's subject is the
+        // interface itself, OR the producing element when the signal
+        // has been allocated (see the Signal Allocation section). Offer
+        // both, plus "the HSI" as a generic fallback, so the requirement
+        // builder's subject dropdown lets the author pick a valid one
+        // and the validator never flags these as orphans.
+        if (chapter.id === 'ch09_hsi') {
+            const out = ['the HSI'];
+            (this.interfaces || []).forEach(i => { if (i.name) out.push(i.name); });
+            this.elements.forEach(e => { if (e.name) out.push(e.name); });
+            return out;
         }
         return [];
     }

@@ -170,6 +170,7 @@ const GRAMMAR = {
                 { id: 'signalName',       label: 'Signal name',       required: true,  hint: 'e.g. VehicleSpeed, VBAT, CAN_TX0' },
                 { id: 'pin',              label: 'Pin / connector / bus address', required: true, hint: 'e.g. Pin 7, Conn-A.3, CAN id 0x1A0' },
                 { id: 'signalProperties', label: 'Electrical / data properties',  required: true, hint: 'e.g. 0–5 V analog, uint16 0.01 km/h/bit' },
+                { id: 'signalConsumer',   label: 'Consumer (for use by)', required: false, hint: 'element the signal is destined for, e.g. BrakeECU' },
                 { id: 'signalTiming',     label: 'Timing',            required: false, hint: 'e.g. 10 ms period, on-change' },
                 { id: 'signalFailure',    label: 'Failure behaviour', required: false, hint: 'e.g. hold last value, default to 0' }
             ]
@@ -368,7 +369,9 @@ class GrammarValidator {
                 if (req.clause) body += ` ${req.clause}`;
                 break;
             case 'interface':
-                body = `define signal ${req.signalName || '[signal]'} on ${req.pin || '[pin]'} as ${req.signalProperties || '[properties]'}`;
+                body = `define signal ${req.signalName || '[signal]'} on ${req.pin || '[pin]'}`;
+                if (req.signalConsumer) body += ` for ${req.signalConsumer}`;
+                body += ` as ${req.signalProperties || '[properties]'}`;
                 if (req.signalTiming)  body += `, ${req.signalTiming}`;
                 if (req.signalFailure) body += `; on failure ${req.signalFailure}`;
                 break;
@@ -438,7 +441,7 @@ class GrammarValidator {
             req.envelope, req.condition, req.reaction, req.trigger,
             req.property, req.value, req.tolerance, req.standard, req.clause,
             req.prohibitedBehavior, req.boundingCondition, req.rationale,
-            req.signalName, req.pin, req.signalProperties, req.signalTiming, req.signalFailure
+            req.signalName, req.pin, req.signalProperties, req.signalConsumer, req.signalTiming, req.signalFailure
         ].filter(Boolean).join(' ');
 
         GRAMMAR.forbiddenWords.forEach(fw => {

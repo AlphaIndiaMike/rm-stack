@@ -99,6 +99,105 @@ class HsiCoverageDiagnostic {
 
 
 // =============================================================================
+// HSI Signal Allocation — bind each signal to the elements at its ends
+// =============================================================================
+//
+// Section 3 of the HSI chapter. The catalog (section 1) says WHAT each
+// signal is; this says BETWEEN WHICH ELEMENTS it travels — "signal
+// 0x248 goes from Subsystem A to Subsystem B". At the System level both
+// endpoints are system elements; the HW/SW disciplines refine these
+// into HW ports and SW units later.
+//
+// Editing here writes producerElementId / consumerElementId back onto
+// the same hsiSignal rows (one store, three views — catalog, coverage,
+// allocation). The generator (section below) then produces element-
+// subject requirements instead of bare interface-subject ones, which
+// is what removes the orphans: the subject becomes a declared element.
+
+class HsiSignalAllocation {
+
+    constructor(doc, onChange) {
+        this.doc = doc;
+        this.onChange = onChange || (() => {});
+    }
+    setDocument(doc) { this.doc = doc; }
+
+    render(container) {
+        const wrap = document.createElement('div');
+        wrap.className = 'requirements-section';
+        wrap.innerHTML = `<div class="section-title">HSI Signal Allocation
+            <span class="help-icon" title="Bind each catalogued signal to the element it comes from and the element it goes to (e.g. 'signal 0x248 from Subsystem A to Subsystem B'). When a producer is set, the generator makes that element the requirement's subject — a real declared element, so no orphan. Refined into HW ports / SW units in the HW and SW disciplines later.">?</span>
+        </div>`;
+
+        const sigs = this.doc.hsiSignals || [];
+        if (sigs.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'empty-state';
+            empty.textContent = 'No signals in the catalog yet — add them in the HSI Signal Catalog table above, then allocate them here.';
+            wrap.appendChild(empty);
+            container.appendChild(wrap);
+            return;
+        }
+
+        const elems = (this.doc.elements || []).filter(e =>
+            !e.componentKind || e.componentKind === 'system');
+
+        const table = document.createElement('div');
+        table.style.cssText = 'border:1px solid #dee2e6;border-radius:4px;overflow:auto;';
+        const cols = '90px 1fr 90px 1fr 60px 1fr';
+
+        const head = document.createElement('div');
+        head.style.cssText = `display:grid;grid-template-columns:${cols};gap:0.4rem;padding:0.5rem 0.75rem;background:#f8f9fa;font-size:11px;text-transform:uppercase;color:#666;font-weight:600;border-bottom:1px solid #dee2e6;`;
+        head.innerHTML = `
+            <div>ID</div><div>Signal</div><div>Dir</div>
+            <div>From (producer)</div><div></div><div>To (consumer)</div>
+        `;
+        table.appendChild(head);
+
+        const elemOpts = (selectedId) =>
+            ['<option value="">— element —</option>'].concat(
+                elems.map(e => `<option value="${e.id}" ${e.id === selectedId ? 'selected' : ''}>${(e.name || e.id).replace(/"/g,'&quot;')}</option>`)
+            ).join('');
+
+        sigs.forEach(s => {
+            const row = document.createElement('div');
+            row.style.cssText = `display:grid;grid-template-columns:${cols};gap:0.4rem;padding:0.5rem 0.75rem;font-size:12px;border-bottom:1px solid #f0f0f0;align-items:center;`;
+            row.innerHTML = `
+                <div style="font-family:monospace;color:#666;">${s.id}</div>
+                <div>${(s.name || '(unnamed)').replace(/[<>]/g,'')}</div>
+                <div style="color:#888;">${s.direction || '—'}</div>
+                <select data-alloc="producer">${elemOpts(s.producerElementId)}</select>
+                <div style="text-align:center;color:#adb5bd;">→</div>
+                <select data-alloc="consumer">${elemOpts(s.consumerElementId)}</select>
+            `;
+            const pSel = row.querySelector('select[data-alloc="producer"]');
+            const cSel = row.querySelector('select[data-alloc="consumer"]');
+            pSel.addEventListener('change', () => {
+                s.producerElementId = pSel.value;
+                this.onChange();
+            });
+            cSel.addEventListener('change', () => {
+                s.consumerElementId = cSel.value;
+                this.onChange();
+            });
+            table.appendChild(row);
+        });
+
+        wrap.appendChild(table);
+
+        if (elems.length === 0) {
+            const note = document.createElement('div');
+            note.style.cssText = 'margin-top:0.5rem;font-size:12px;color:#dc3545;';
+            note.textContent = 'No system elements declared yet — declare them in Chapter 5 (System Breakdown) to allocate signals to them.';
+            wrap.appendChild(note);
+        }
+
+        container.appendChild(wrap);
+    }
+}
+
+
+// =============================================================================
 // HSI Requirement Generator — single button, idempotent
 // =============================================================================
 
@@ -151,8 +250,21 @@ class HsiRequirementGenerator {
     generate() {
         let added = 0;
         this._eligible().forEach(s => {
+            // Subject preference, best → fallback:
+            //   1. the producing element (Signal Allocation section) —
+            //      a real declared element, the strongest subject and
+            //      never an orphan
+            //   2. the parent interface (Chapter 5) — also a declared,
+            //      valid subject for an interface-definition requirement
+            //   3. "the HSI" — generic fallback when nothing is bound
+            const producer = s.producerElementId
+                ? this.doc.elements.find(e => e.id === s.producerElementId) : null;
+            const consumer = s.consumerElementId
+                ? this.doc.elements.find(e => e.id === s.consumerElementId) : null;
             const iface = (this.doc.interfaces || []).find(i => i.id === s.interfaceId);
-            const subject = iface ? (iface.name || iface.id) : 'the HSI';
+            const subject = producer ? (producer.name || producer.id)
+                          : iface    ? (iface.name || iface.id)
+                          : 'the HSI';
             const r = new Requirement({
                 chapterId: 'ch09_hsi',
                 conditional: 'ubiquitous',
@@ -161,9 +273,12 @@ class HsiRequirementGenerator {
                 signalName: s.name,
                 pin: s.pin,
                 signalProperties: this._propsOf(s),
+                signalConsumer: consumer ? (consumer.name || consumer.id) : '',
                 signalTiming: s.period || '',
                 signalFailure: s.failureBehavior || '',
-                rationale: `Generated from HSI signal catalog entry ${s.id} (${s.name}).`,
+                rationale: `Generated from HSI signal catalog entry ${s.id} (${s.name})`
+                    + (producer ? `, allocated from ${producer.name || producer.id}` : '')
+                    + (consumer ? ` to ${consumer.name || consumer.id}` : '') + '.',
                 verification: 'inspection',
                 asil: 'QM'
             });
@@ -245,6 +360,7 @@ Chapters.register('system', {
     declarations: ['hsiSignal'],
     extraWidgets: (doc, onChange) => [
         new HsiCoverageDiagnostic(doc),
+        new HsiSignalAllocation(doc, onChange),
         new HsiRequirementGenerator(doc, onChange)
     ],
     checklist: [
