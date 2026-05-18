@@ -37,7 +37,7 @@ class SwTraceStatusReport {
         }
 
         const total = swReqs.length;
-        const withMethod = swReqs.filter(r => r.verification).length;
+        const withMethod = swReqs.filter(r => r.verification && r.verification.length).length;
         const traced = swReqs.filter(r =>
             Array.isArray(r.parentSystemReqs) && r.parentSystemReqs.length > 0).length;
         const implemented = swReqs.filter(r => r.implemented).length;
@@ -84,7 +84,7 @@ class SwTraceStatusReport {
                 <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${stmt.replace(/"/g,'&quot;')}">${stmt}</div>
                 <div style="font-family:monospace;font-size:11px;color:${parents === '— none —' ? '#dc3545' : '#555'};">${parents}</div>
                 <div style="font-size:11px;">${intHtml}</div>
-                <div>${r.verification || '<span style="color:#dc3545;">—</span>'}</div>
+                <div>${(r.verification && r.verification.length) ? r.verification.join(", ") : "<span style=\"color:#dc3545;\">—</span>"}</div>
                 <div>${r.implemented
                     ? '<span style="color:#198754;font-weight:600;">✓ done</span>'
                     : '<span style="color:#999;">○ open</span>'}</div>

@@ -458,8 +458,11 @@ class GrammarValidator {
             errors.push('Rationale is tautological.');
         }
 
-        // 7. Verification method required
-        if (!req.verification) {
+        // 7. Verification method required (at least one)
+        const verif = Array.isArray(req.verification)
+            ? req.verification
+            : (req.verification ? [req.verification] : []);
+        if (verif.length === 0) {
             errors.push('Verification method not chosen.');
         }
 
@@ -474,15 +477,17 @@ class GrammarValidator {
             if (!req.safeStateRef) warnings.push('Safety mechanism missing safe-state reference.');
         }
 
-        // 10. Prohibition requirements cannot be verified by test alone
-        if (pred.requiresAnalysisVerification && req.verification === 'test') {
+        // 10. Prohibition requirements cannot be verified by test ALONE
+        if (pred.requiresAnalysisVerification &&
+            verif.length === 1 && verif[0] === 'test') {
             warnings.push('Prohibition requirements should not be verified by test alone. Add analysis.');
         }
 
-        // 11. High-integrity (ASIL C/D or SIL 3/4) + inspection-only
+        // 11. High-integrity (ASIL C/D or SIL 3/4) + inspection-ONLY
         //     verification is flagged. Both frameworks treat their top
         //     tiers the same way for this purpose.
-        if (GRAMMAR.highIntegrityLevels.includes(req.asil) && req.verification === 'inspection') {
+        if (GRAMMAR.highIntegrityLevels.includes(req.asil) &&
+            verif.length === 1 && verif[0] === 'inspection') {
             warnings.push(`${req.asil} with inspection-only verification requires justification.`);
         }
 

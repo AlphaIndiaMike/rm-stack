@@ -18,6 +18,7 @@ Chapters.register('software', {
     intro: 'Detection, indication and mitigation of faults; self-test; monitoring (watchdog/alive, control-flow, plausibility, range/CRC). Each carries a DC target and detection+reaction ≤ FTTI, and derives from a System parent inheriting its ASIL/SIL.',
     allowsRequirements: true,
     subjectMode: 'element',
+    declarations: ['safeState'],
     requirementBudget: { min: 0, max: 110 },
     checklist: [
         { id: 'ssr1', text: 'For each safety-related HW fault (from the HW FMEA): a SW detection, indication and mitigation requirement.',

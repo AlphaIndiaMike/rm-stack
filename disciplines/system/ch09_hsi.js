@@ -279,7 +279,7 @@ class HsiRequirementGenerator {
                 rationale: `Generated from HSI signal catalog entry ${s.id} (${s.name})`
                     + (producer ? `, allocated from ${producer.name || producer.id}` : '')
                     + (consumer ? ` to ${consumer.name || consumer.id}` : '') + '.',
-                verification: 'inspection',
+                verification: ['inspection'],
                 asil: 'QM'
             });
             r.id = this.doc.nextId('requirement');

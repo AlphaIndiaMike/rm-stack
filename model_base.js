@@ -166,7 +166,13 @@ class Requirement {
         this.degradationStrategy = data.degradationStrategy || '';
         this.supervisionAssumption = data.supervisionAssumption || '';
         this.fttiContribution    = data.fttiContribution || '';
-        this.verification  = data.verification || '';
+        // verification: list of methods (review, analysis, test, ...).
+        // A requirement may legitimately need several. Back-compat: a
+        // legacy single string becomes a one-element array; empty stays
+        // an empty array.
+        this.verification  = Array.isArray(data.verification)
+            ? data.verification.slice()
+            : (data.verification ? [data.verification] : []);
         this.passCriterion = data.passCriterion || '';
         this.asil          = migrateAsilValue(data.asil || '');
         this.parentSG      = data.parentSG || '';
@@ -711,6 +717,27 @@ class SyrsDocument {
      * Orphan handling: an element whose parentId points to a deleted
      * parent appears at root (depth 0) so it's never lost.
      */
+    /** The element componentKind that a discipline owns. System owns
+     *  'system' (and legacy unowned elements); software owns 'sw';
+     *  hardware owns 'hw'. One place so every view filters identically. */
+    static componentKindForDiscipline(disciplineId) {
+        if (disciplineId === 'software') return 'sw';
+        if (disciplineId === 'hardware') return 'hw';
+        return 'system';
+    }
+
+    /** Elements owned by a discipline's view. Legacy elements with no
+     *  componentKind count as 'system' so old documents are unchanged.
+     *  This is what discipline-scoped enumerations (outline auto-expand,
+     *  per-element diagnostics, subject lists, export) must use instead
+     *  of the raw doc.elements array — otherwise SW units leak into the
+     *  System views and vice versa. */
+    elementsForDiscipline(disciplineId) {
+        const kind = SyrsDocument.componentKindForDiscipline(disciplineId);
+        return this.elements.filter(e =>
+            (e.componentKind || 'system') === kind);
+    }
+
     elementsInTreeOrder() {
         const byParent = new Map();
         this.elements.forEach(e => {
@@ -764,7 +791,8 @@ class SyrsDocument {
         if (!chapter) return [];
         if (chapter.subjectMode === 'system') return ['the system'];
         if (chapter.subjectMode === 'element') {
-            return this.elements.map(e => e.name).filter(Boolean);
+            return this.elementsForDiscipline(this.discipline)
+                .map(e => e.name).filter(Boolean);
         }
         // HSI: an interface-definition requirement's subject is the
         // interface itself, OR the producing element when the signal
@@ -775,7 +803,8 @@ class SyrsDocument {
         if (chapter.id === 'ch09_hsi') {
             const out = ['the HSI'];
             (this.interfaces || []).forEach(i => { if (i.name) out.push(i.name); });
-            this.elements.forEach(e => { if (e.name) out.push(e.name); });
+            this.elementsForDiscipline(this.discipline)
+                .forEach(e => { if (e.name) out.push(e.name); });
             return out;
         }
         return [];

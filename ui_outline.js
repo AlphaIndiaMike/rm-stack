@@ -64,10 +64,11 @@ class OutlineView {
             // Chapter 7 (or any autoExpand='elements') gets one child row
             // per declared element.
             if (chapter.autoExpand === 'elements') {
-                this.doc.elements.forEach(el => {
+                const els = this.doc.elementsForDiscipline(this.doc.discipline);
+                els.forEach(el => {
                     container.appendChild(this._renderElementChild(chapter, el));
                 });
-                if (this.doc.elements.length === 0) {
+                if (els.length === 0) {
                     const empty = document.createElement('div');
                     empty.className = 'outline-chapter child';
                     empty.style.fontStyle = 'italic';

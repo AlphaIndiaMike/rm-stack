@@ -290,7 +290,7 @@ class ModeRequirementGenerator {
                 trigger:   t.trigger,
                 transitionTime: t.transitionTime || '',
                 rationale: `Generated from mode transition ${t.id} (${fromName} → ${toName}).`,
-                verification: 'inspection'
+                verification: ['inspection']
             });
             r.id = this.doc.nextId('requirement');
             r.modifiedAt = new Date().toISOString();

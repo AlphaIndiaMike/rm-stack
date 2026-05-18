@@ -24,7 +24,8 @@ class ElementCoverageDiagnostic {
             <span class="help-icon" title="Per-element status: requirement count vs 4–13 budget, ASIL, gap flags. Click a row to drill into that element.">?</span>
         </div>`;
 
-        if (!this.doc.elements || this.doc.elements.length === 0) {
+        const sysEls = this.doc.elementsForDiscipline(this.doc.discipline);
+        if (sysEls.length === 0) {
             const empty = document.createElement('div');
             empty.className = 'empty-state';
             empty.textContent = 'No elements declared yet — add them in Chapter 5 (System Breakdown).';

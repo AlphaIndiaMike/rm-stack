@@ -16,6 +16,7 @@ Chapters.register('hardware', {
     intro: 'Fault detection/handling, safety mechanisms with DC targets, and the architectural-metric targets (SPFM/LFM/PMHF per ASIL) as obligations — computation external. Each derives from a System parent inheriting its ASIL/SIL.',
     allowsRequirements: true,
     subjectMode: 'element',
+    declarations: ['safeState'],
     requirementBudget: { min: 0, max: 110 },
     checklist: [
         { id: 'hsr1', text: 'Every HW safety mechanism is a requirement with a Diagnostic Coverage (DC) target.',

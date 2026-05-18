@@ -400,8 +400,8 @@ class EditorView {
 
         const asilOpts = [{value:'',label:'— select —'},
                           ...GRAMMAR.asilLevels.map(a => ({value: a, label: a}))];
-        const verifOpts = [{value:'',label:'— select —'},
-                           ...GRAMMAR.verificationMethods.map(m => ({value: m.id, label: m.label}))];
+        const verifOpts = GRAMMAR.verificationMethods
+            .map(m => ({ value: m.id, label: m.label }));
 
         if (ch === 'ch04_fsc') {
             panel.appendChild(this._makeSelectSlot('Parent Safety Goal *', this._sgOptions(),
@@ -425,9 +425,7 @@ class EditorView {
                 this.draftReq.supervisionAssumption,
                 v => { this.draftReq.supervisionAssumption = v; this._refreshPreview(wrap); },
                 'What the end-user is assumed to detect or do'));
-            panel.appendChild(this._makeSelectSlot('Verification method *', verifOpts,
-                this.draftReq.verification,
-                v => { this.draftReq.verification = v; this._refreshPreview(wrap); }));
+            this._mountMultiSelectAttr(panel, 'Verification method(s) *', 'verification', verifOpts, 'No verification methods.');
             panel.appendChild(this._makeInputSlot('Pass criterion', this.draftReq.passCriterion,
                 v => { this.draftReq.passCriterion = v; this._refreshPreview(wrap); }));
         }
@@ -441,9 +439,7 @@ class EditorView {
                 'No item functions declared yet — author them in Chapter 1.');
             panel.appendChild(this._makeSelectSlot('ASIL *', asilOpts, this.draftReq.asil,
                 v => { this.draftReq.asil = v; this._refreshPreview(wrap); }));
-            panel.appendChild(this._makeSelectSlot('Verification method *', verifOpts,
-                this.draftReq.verification,
-                v => { this.draftReq.verification = v; this._refreshPreview(wrap); }));
+            this._mountMultiSelectAttr(panel, 'Verification method(s) *', 'verification', verifOpts, 'No verification methods.');
             panel.appendChild(this._makeInputSlot('Pass criterion *', this.draftReq.passCriterion,
                 v => { this.draftReq.passCriterion = v; this._refreshPreview(wrap); },
                 'Quantitative acceptance threshold'));
@@ -461,9 +457,7 @@ class EditorView {
                 'No item functions declared yet.');
             panel.appendChild(this._makeSelectSlot('ASIL *', asilOpts, this.draftReq.asil,
                 v => { this.draftReq.asil = v; this._refreshPreview(wrap); }));
-            panel.appendChild(this._makeSelectSlot('Verification method *', verifOpts,
-                this.draftReq.verification,
-                v => { this.draftReq.verification = v; this._refreshPreview(wrap); }));
+            this._mountMultiSelectAttr(panel, 'Verification method(s) *', 'verification', verifOpts, 'No verification methods.');
             panel.appendChild(this._makeInputSlot('Pass criterion', this.draftReq.passCriterion,
                 v => { this.draftReq.passCriterion = v; this._refreshPreview(wrap); }));
             this._mountMultiSelectAttr(panel, 'Mode applicability', 'modeApplicability',
@@ -497,9 +491,7 @@ class EditorView {
             panel.appendChild(this._makeSelectSlot('Safe state ref', this._safeStateOptions(),
                 this.draftReq.safeStateRef,
                 v => { this.draftReq.safeStateRef = v; this._refreshPreview(wrap); }));
-            panel.appendChild(this._makeSelectSlot('Verification method *', verifOpts,
-                this.draftReq.verification,
-                v => { this.draftReq.verification = v; this._refreshPreview(wrap); }));
+            this._mountMultiSelectAttr(panel, 'Verification method(s) *', 'verification', verifOpts, 'No verification methods.');
             panel.appendChild(this._makeInputSlot('Pass criterion', this.draftReq.passCriterion,
                 v => { this.draftReq.passCriterion = v; this._refreshPreview(wrap); }));
         }
@@ -519,9 +511,7 @@ class EditorView {
                 'No System acceptance or TSR requirements yet — author them in the System discipline.');
             panel.appendChild(this._makeSelectSlot('ASIL / SIL', asilOpts, this.draftReq.asil,
                 v => { this.draftReq.asil = v; this._refreshPreview(wrap); }));
-            panel.appendChild(this._makeSelectSlot('Verification method *', verifOpts,
-                this.draftReq.verification,
-                v => { this.draftReq.verification = v; this._refreshPreview(wrap); }));
+            this._mountMultiSelectAttr(panel, 'Verification method(s) *', 'verification', verifOpts, 'No verification methods.');
             panel.appendChild(this._makeInputSlot('Pass criterion', this.draftReq.passCriterion,
                 v => { this.draftReq.passCriterion = v; this._refreshPreview(wrap); }));
         }
@@ -538,13 +528,40 @@ class EditorView {
             panel.appendChild(this._makeSelectSlot('Parent Safety Goal', this._sgOptions(),
                 this.draftReq.parentSG,
                 v => { this.draftReq.parentSG = v; this._refreshPreview(wrap); }));
-            panel.appendChild(this._makeSelectSlot('Verification method *', verifOpts,
-                this.draftReq.verification,
-                v => { this.draftReq.verification = v; this._refreshPreview(wrap); }));
+            this._mountMultiSelectAttr(panel, 'Verification method(s) *', 'verification', verifOpts, 'No verification methods.');
             panel.appendChild(this._makeInputSlot('Pass criterion', this.draftReq.passCriterion,
                 v => { this.draftReq.passCriterion = v; this._refreshPreview(wrap); }));
             panel.appendChild(this._makeSelectSlot('ASIL', asilOpts, this.draftReq.asil,
                 v => { this.draftReq.asil = v; this._refreshPreview(wrap); }));
+        }
+
+        // Predicate-driven safety-mechanism inputs. The grammar flags a
+        // requirement as a safety mechanism from its PREDICATE (e.g.
+        // "detect"), not from its chapter, and then requires a DC target
+        // and a safe-state reference. Some chapter branches above don't
+        // add those slots, which previously made such a requirement
+        // impossible to complete (validation warned, but there was no
+        // field to satisfy it). Guarantee the inputs exist whenever the
+        // chosen predicate needs them, in EVERY chapter, without
+        // duplicating a slot a branch already added.
+        const selPred = this.draftReq.predicate
+            ? GRAMMAR.predicates.find(p => p.id === this.draftReq.predicate)
+            : null;
+        if (selPred && selPred.isSafetyMechanism) {
+            const labels = Array.from(panel.querySelectorAll('.req-slot > label'))
+                .map(l => l.textContent.trim());
+            if (!labels.some(t => t.indexOf('Diagnostic Coverage') === 0)) {
+                panel.appendChild(this._makeInputSlot(
+                    'Diagnostic Coverage (DC) target', this.draftReq.dcTarget,
+                    v => { this.draftReq.dcTarget = v; this._refreshPreview(wrap); },
+                    'e.g. ≥90%, ≥99% — ISO 26262-5 Annex F / -6:6'));
+            }
+            if (!labels.some(t => t.indexOf('Safe state ref') === 0)) {
+                panel.appendChild(this._makeSelectSlot(
+                    'Safe state ref', this._safeStateOptions(),
+                    this.draftReq.safeStateRef,
+                    v => { this.draftReq.safeStateRef = v; this._refreshPreview(wrap); }));
+            }
         }
         return panel;
     }
@@ -733,7 +750,7 @@ class EditorView {
                 <div class="req-badges">
                     ${req.externalId ? `<span class="req-badge" style="background:#e7f1ff;color:#0a58ca;" title="External RM tool ID (Polarion / PTC). Not synced.">ext: ${req.externalId}</span>` : ''}
                     ${req.asil ? `<span class="req-badge ${asilClass}" title="${(asilTitles[req.asil] || 'Safety integrity level').replace(/"/g,'&quot;')}">${req.asil}</span>` : ''}
-                    ${req.verification ? `<span class="req-badge" title="Verification method.">Verif: ${req.verification}</span>` : ''}
+                    ${(req.verification && req.verification.length) ? `<span class="req-badge" title="Verification method(s)">Verif: ${req.verification.join(', ')}</span>` : ''}
                     ${req.dcTarget ? `<span class="req-badge" title="Diagnostic Coverage target.">DC ${req.dcTarget}</span>` : ''}
                     ${req.parentSG ? `<span class="req-badge" title="Parent Safety Goal.">→ ${this.doc.nameForId(req.parentSG)}</span>` : ''}
                     ${req.safeStateRef ? `<span class="req-badge" title="Safe state.">SS: ${this.doc.nameForId(req.safeStateRef)}</span>` : ''}

@@ -54,7 +54,7 @@ const ATTR_DEFS = [
     // Quality attributes
     { key: 'rationale',          label: 'Rationale' },
     { key: 'source',             label: 'Source' },
-    { key: 'verification',       label: 'Verification' },
+    { key: 'verification',       label: 'Verification', list: true },
     { key: 'passCriterion',      label: 'Pass criterion' },
     // Safety attributes
     { key: 'asil',               label: 'ASIL' },
@@ -139,7 +139,7 @@ class Exporter {
 
         outline.forEach(chapter => {
             if (chapter.autoExpand === 'elements') {
-                doc.elements.forEach(el => {
+                doc.elementsForDiscipline(doc.discipline).forEach(el => {
                     const reqs = doc.requirementsForElement(el.id);
                     if (reqs.length === 0) return;
                     Exporter._pushChapterHeader(out, `${chapter.number}.x ${el.name} (ASIL ${el.asil})`, chapter.intro);
@@ -255,10 +255,11 @@ class Exporter {
             if (chapter.intro) body.push(`<p class="intro">${esc(chapter.intro)}</p>`);
 
             if (chapter.autoExpand === 'elements') {
-                if (doc.elements.length === 0) {
+                const exEls = doc.elementsForDiscipline(doc.discipline);
+                if (exEls.length === 0) {
                     body.push('<p class="empty">No elements declared yet.</p>');
                 }
-                doc.elements.forEach(el => {
+                exEls.forEach(el => {
                     body.push(`<h3>${esc(chapter.number)}.x ${esc(el.name || '(unnamed)')} <small>ASIL ${esc(el.asil)}</small></h3>`);
                     if (el.purpose) body.push(`<p>${esc(el.purpose)}</p>`);
                     const reqs = doc.requirementsForElement(el.id);

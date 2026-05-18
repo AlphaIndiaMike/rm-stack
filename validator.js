@@ -232,7 +232,7 @@ class DocumentValidator {
 
     /** Element coverage: requirement count, allocated function count. */
     elementCoverage() {
-        return this.doc.elements.map(el => {
+        return this.doc.elementsForDiscipline(this.doc.discipline).map(el => {
             const reqCount = this.doc.requirementsForElement(el.id).length;
             return {
                 id: el.id,

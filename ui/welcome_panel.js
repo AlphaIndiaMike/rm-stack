@@ -27,7 +27,6 @@ const WelcomePanel = {
         const wrapper = document.createElement('div');
         wrapper.className = 'welcome-panel';
         wrapper.innerHTML = `
-            <h4 class="welcome-title">Welcome to the SyRS Authoring Tool</h4>
             <p class="welcome-lead">
                 Author safety-aware system requirements with grammar validation,
                 completeness tracking, and integrity checks. Everything stays
