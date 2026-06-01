@@ -6,13 +6,15 @@
  * with predicate "exhibit" or "process"; the property/value/unit/range
  * slots carry the structured detail).
  *
- * NOTE on allocation: the old allocation matrix was removed (see
- * ch10_hw.js header). Author calibration requirements here directly.
+ * NOTE on allocation: an old per-element allocation matrix was removed
+ * (it tried to do allocation before the project was ready for it).
+ * Allocation lives on each requirement (Requirement.allocation, an array
+ * of element IDs). Author calibration requirements here directly.
  */
 
 Chapters.register('system', {
     id: 'ch13_calibration',
-    number: '10',
+    number: '9',
     title: 'Calibration and Configuration',
     order: 140,
     intro: 'Calibratable parameters with ranges, defaults, validation.',

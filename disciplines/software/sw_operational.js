@@ -24,6 +24,8 @@ Chapters.register('software', {
         { id: 'swo3', text: 'Freedom-from-interference requirements where safety and non-safety code share resources (ISO 26262-9:6).' },
         { id: 'swo4', text: 'Process / standard constraints that bind the implementation stated as requirements.',
           help: 'IEC 61508-3:7.2 — process constraints shall be specified with the requirements.' },
-        { id: 'swo5', text: 'Each requirement traces to a System parent; safety ones inherit the parent ASIL/SIL.' }
+        { id: 'swo5', text: 'Relevant requirements/constraints from the HW design captured (register maps, memory map, HW timing, errata the SW must respect).',
+          help: 'ISO 26262-6:6 lists "relevant requirements of the HW design specification" as an input the SW requirements shall consider, alongside the HSI.' },
+        { id: 'swo6', text: 'Each requirement traces to a System parent; safety ones inherit the parent ASIL/SIL.' }
     ]
 });

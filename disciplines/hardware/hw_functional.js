@@ -23,7 +23,6 @@ Chapters.register('hardware', {
         { id: 'hwf2', text: 'Operating states and transitions specified (power-up, shutdown, reset).' },
         { id: 'hwf3', text: 'For safety-classified requirements: fault-reaction / safe-state behaviour specified.' },
         { id: 'hwf4', text: 'Each requirement traces to a System parent and (if safety) carries the parent ASIL/SIL unchanged.' },
-        { id: 'hwf5', text: 'Subject is a declared HW component or "the hardware" — not a schematic net (detailed design).' },
-        { id: 'hwf6', text: 'Every requirement passes SMART and predicate/EARS checks and has a verification method.' }
+        { id: 'hwf5', text: 'Subject is a declared HW component or "the hardware" — not a schematic net (detailed design).' }
     ]
 });

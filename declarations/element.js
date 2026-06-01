@@ -50,7 +50,7 @@ Declarations.register('element', {
     },
     renderRow: item => {
         const depth = item._depth || 0;
-        const indent = depth > 0 ? '<span style="color:#adb5bd;">' + '·  '.repeat(depth) + '</span>' : '';
+        const indent = depth > 0 ? '<span class="elem-indent">' + '·  '.repeat(depth) + '</span>' : '';
         return `
             <div class="req-id" style="align-self:center;" title="Internal stable ID.">${item.id}</div>
             <div style="display:flex;align-items:center;gap:0.25rem;">

@@ -43,7 +43,10 @@ const ID_PREFIX = {
     element:        'ELEM',
     interfaceSpec:  'IF',
     failureMode:    'FM',
-    hsiSignal:      'HSI'
+    hsiSignal:      'HSI',
+    safetyActor:    'ACTOR',
+    timingChain:    'TC',
+    safeStateReaction: 'SSR'
 };
 
 /**
@@ -141,6 +144,12 @@ class Requirement {
         // Attributes
         this.rationale     = data.rationale || '';
         this.source        = data.source || '';
+        // reactionRef: the SafeStateReaction (SSR-xxxx) this detect-and-
+        //   react TSR was generated from. One safe-state transition may
+        //   carry several reactions (different detecting elements / observed
+        //   interfaces), so a detect TSR is de-duplicated by this ref, not
+        //   by (source + element) which would collapse siblings.
+        this.reactionRef   = data.reactionRef || '';
         this.allocation    = data.allocation || [];
         // Structured upstream traceability (per-chapter attribute).
         // parentItemFunctions: array of ItemFunction IDs that this
@@ -247,6 +256,15 @@ class Element {
 
         // SW-specific.
         this.programmingLang = data.programmingLang || '';
+
+        // Sub-domain → system mapping. On a HW component / SW unit
+        // (componentKind 'hw' / 'sw'), the system Element ID(s) this
+        // component implements. This is the link that lets a System TSR
+        // allocated to HW/SW be "taken over" into a derived HW/SW
+        // requirement on the implementing component (see the HW/SW
+        // Inputs takeover generator). Empty on system-kind elements and
+        // on legacy files (additive — no migration needed).
+        this.implementsElementIds = data.implementsElementIds || [];
     }
     static generateId() { return provisionalId('ELEM'); }
     toJSON() {
@@ -335,6 +353,31 @@ class Mode {
     toJSON() { return Object.assign({}, this); }
 }
 
+/**
+ * SafetyActor — a target an FSR can be allocated to in the Functional
+ * Safety Concept. ISO 26262-3 allocates FSRs to the item, to external
+ * measures, or to assumed driver/operator actions. We model that as a
+ * small declared list whose names feed the FSR subject dropdown, rather
+ * than a full preliminary-architecture model (deliberately out of scope).
+ *
+ * kind:
+ *   'internal'        — the item/system itself (e.g. "the system")
+ *   'external_measure'— a distinct E/E system or other-technology measure
+ *                       in the vehicle (ESC, another ECU, run-flat tyre)
+ *   'human_environment' — assumed actor: driver, operator, other road user
+ */
+class SafetyActor {
+    constructor(data) {
+        data = data || {};
+        this.id   = data.id || SafetyActor.generateId();
+        this.name = data.name || '';
+        this.kind = data.kind || 'external_measure';
+        this.description = data.description || '';
+    }
+    static generateId() { return provisionalId('ACTOR'); }
+    toJSON() { return Object.assign({}, this); }
+}
+
 
 /**
  * ModeTransition — directed edge in the mode/state model.
@@ -357,6 +400,24 @@ class ModeTransition {
         this.trigger        = data.trigger || '';
         this.guard          = data.guard || '';
         this.transitionTime = data.transitionTime || '';
+        // Author marks a transition as the fault reaction into a safe
+        // state (System Breakdown "Safe state?" checkbox). The Timing
+        // Analysis safe-state reaction tool lists these automatically.
+        // Safe-state reaction allocation (set in Timing Analysis, not here):
+        // which element detects the fault and commands the safe state, the
+        // signal it is observed on, and the detect-and-react time budget.
+        // Whether a transition *reaches* a safe state is derived from the
+        // target mode (Mode.isSafeState / SafeState.modeRefs), never re-asked.
+        // LEGACY single-reaction allocation. Superseded by first-class
+        // SafeStateReaction rows (one transition may now carry several).
+        // Kept so older files read; SyrsDocument._migrateSafeStateReactions
+        // lifts these into SafeStateReaction objects on load. Not written by
+        // the current UI.
+        this.detectingElementId = data.detectingElementId || '';
+        this.observedSignalId   = data.observedSignalId || '';   // 'sig:ID' | 'iif:ID'
+        this.reactionBudget     = data.reactionBudget || '';
+        // Legacy: superseded by the derivation above; kept for back-compat.
+        this.isSafeStateTransition = data.isSafeStateTransition || false;
     }
     static generateId() { return provisionalId('TR'); }
     toJSON() { return Object.assign({}, this); }
@@ -385,6 +446,27 @@ class InterfaceSpec {
         this.jitter    = data.jitter || '';
         this.failureBehavior = data.failureBehavior || '';
         this.notes     = data.notes || '';
+        // scope: 'external' (boundary I/O — the System Breakdown table)
+        //      | 'internal' (element-to-element / HW-to-HW link inside the
+        //        system box, e.g. CAN_INT1 between two controllers — the
+        //        Internal Interfaces table in Timing Analysis).
+        // Legacy rows have no scope and read as 'external' (additive — no
+        // migration). Internal-scope rows bind their endpoints to declared
+        // system elements (producerElementId / consumerElementId) rather
+        // than the free-text Node A / Node B used for boundary partners.
+        this.scope     = data.scope || 'external';
+        this.producerElementId = data.producerElementId || '';
+        this.consumerElementId = data.consumerElementId || '';
+        // signalName: for an internal element-to-element link, the signal /
+        // message carried over it (reads "MCU1 — CAN0 — WheelSpeed — CAN2 —
+        // MCU2"). interfaceTo is the receiving-side interface name; `name`
+        // is the sending-side interface. Both autocomplete from the
+        // interfaces lexicon.
+        this.signalName = data.signalName || '';
+        this.interfaceTo = data.interfaceTo || '';
+        // budget: per-hop time contribution, parsed by Timing.parseMs.
+        // Used by the timing-chain sum vs FTTI check.
+        this.budget    = data.budget || '';
     }
     static generateId() { return provisionalId('IF'); }
     toJSON() { return Object.assign({}, this); }
@@ -466,7 +548,15 @@ class HsiSignal {
         this.name            = data.name || '';
         this.interfaceId     = data.interfaceId || '';
         this.pin             = data.pin || '';
-        this.direction       = data.direction || 'input';
+        // direction now describes the HW<->SW boundary of ONE element:
+        //   'hw-to-sw' — HW provides the signal, SW reads it (an input the
+        //               software consumes, e.g. an ADC channel / captured pin)
+        //   'sw-to-hw' — SW drives the signal out through HW (an output)
+        //   'bidirectional'
+        // Legacy item-perspective values are migrated: 'input' (into the
+        // item, read by SW) -> 'hw-to-sw'; 'output' -> 'sw-to-hw'.
+        const _dir = data.direction || 'hw-to-sw';
+        this.direction       = ({ input: 'hw-to-sw', output: 'sw-to-hw' }[_dir]) || _dir;
         this.signalType      = data.signalType || 'digital';
         this.electrical      = data.electrical || '';
         this.encoding        = data.encoding || '';
@@ -474,15 +564,103 @@ class HsiSignal {
         this.failureBehavior = data.failureBehavior || '';
         this.diagnostic      = data.diagnostic || '';
         this.notes           = data.notes || '';
-        // Signal allocation — which element produces/consumes this
-        // signal. Optional at the System level; refined in the HW and
-        // SW disciplines later (HW-port and SW-unit specifics). Both
-        // are ELEM IDs (system-kind elements) so a signal is captured
-        // as "signal X goes from Subsystem A to Subsystem B".
+        // elementId: the controller (MCU) the signal terminates on (its
+        // requirement subject). interfaceId (above) is the external interface
+        // it belongs to. swUnitId is an optional SW-unit link, retained for
+        // forward use; not edited in the current UI.
+        this.elementId         = data.elementId || '';
+        this.swUnitId          = data.swUnitId || '';
         this.producerElementId = data.producerElementId || '';
         this.consumerElementId = data.consumerElementId || '';
     }
     static generateId() { return provisionalId('HSI'); }
+    toJSON() { return Object.assign({}, this); }
+}
+
+
+/**
+ * TimingChain — the per-element/interface time breakdown of one mode
+ * transition (ISO 26262-1 FTTI; the per-hop time is FRTI+FDTI inclusive
+ * at system level — the FRTI/FDTI split is a software-level refinement,
+ * not forced here).
+ *
+ * A chain is anchored to a declared ModeTransition (e.g. OFF → ON). It
+ * lists, in order, the architectural hops that transition travels through
+ * — external interface → element → internal interface → element → ... —
+ * and budgets the time each hop consumes. The Σ of the hop budgets must
+ * fit the transition's own time budget (transitionTime), which in turn is
+ * checked against the governing Safety Goal's FTTI by the existing
+ * mode-timing crosscheck.
+ *
+ *   modeTransitionId  TR-xxxx — the transition this chain decomposes.
+ *   segments[]        ordered hops, each:
+ *       kind   'externalIf' (HSI boundary signal)
+ *            | 'element'    (a system element)
+ *            | 'internalIf' (an internal element-to-element interface)
+ *       refId  id of the referenced signal / element / interface
+ *       budget time this hop consumes (parsed by Timing.parseMs)
+ *       note   free text
+ *
+ * Generation (Timing Analysis chapter) reuses the acceptance requirement
+ * the System-Breakdown generator already makes for the transition (found
+ * by from/to/trigger — no duplication) and adds one element TSR per
+ * element hop, each carrying its budget and tracing to that acceptance
+ * requirement. Generated element reqs carry source = the transition id,
+ * so re-running is idempotent.
+ */
+class TimingChain {
+    constructor(data) {
+        data = data || {};
+        this.id               = data.id || TimingChain.generateId();
+        this.name             = data.name || '';
+        this.modeTransitionId = data.modeTransitionId || '';
+        this.segments = (data.segments || []).map(s => ({
+            kind:   s.kind   || 'element',
+            refId:  s.refId  || '',
+            budget: s.budget || '',
+            note:   s.note   || ''
+        }));
+    }
+    static generateId() { return provisionalId('TC'); }
+    toJSON() {
+        return {
+            id: this.id,
+            name: this.name,
+            modeTransitionId: this.modeTransitionId,
+            segments: this.segments.map(s => ({ ...s }))
+        };
+    }
+}
+
+
+/**
+ * A single detect-and-react allocation for a safe-state reaction — i.e.
+ * one way the fault that demands the safe state is detected and acted on.
+ * Bound to a ModeTransition that goes FROM a non-safe (operational /
+ * hazardous) state INTO a safe state (see tmIsSafeStateReaction). A single
+ * such transition may have SEVERAL reactions because the same fault may be
+ * observed on different interfaces / by different elements; each reaction
+ * yields its own detect-and-react TSR (ISO 26262-1: detect within FTTI =
+ * FDTI + FRTI). The governing Safety Goal / ASIL / FTTI are derived from
+ * the target safe state, not stored here.
+ */
+class SafeStateReaction {
+    constructor(data) {
+        data = data || {};
+        this.id                 = data.id || SafeStateReaction.generateId();
+        this.transitionId       = data.transitionId || '';
+        this.detectingElementId = data.detectingElementId || '';
+        this.observedSignalId   = data.observedSignalId || '';   // 'sig:ID' | 'iif:ID'
+        this.reactionBudget     = data.reactionBudget || '';
+        // safeStateRef: the SafeState (SS-…) this reaction achieves. The
+        // target mode may realise several safe states (governed by different
+        // Safety Goals / ASILs / FTTIs); picking one here makes the
+        // generated TSR's ASIL, FTTI and safeStateRef deterministic instead
+        // of "first match". Empty = let the generator resolve it (the sole
+        // realising safe state, else first match — back-compat).
+        this.safeStateRef       = data.safeStateRef || '';
+    }
+    static generateId() { return provisionalId('SSR'); }
     toJSON() { return Object.assign({}, this); }
 }
 
@@ -494,6 +672,10 @@ class SyrsDocument {
     constructor(data) {
         data = data || {};
         this.schemaVersion = 3;
+        // Top-level project name. Missing key → unnamed project (no
+        // backwards-compat shim by design). Drives the save filename and
+        // the header pill. Empty string means "unnamed".
+        this.projectName   = data.projectName || '';
         this.discipline    = data.discipline || 'system';
         this.docClass      = data.docClass || 'complex';
         this.title         = data.title || 'Untitled System Requirements Specification';
@@ -504,12 +686,21 @@ class SyrsDocument {
         this.safeStates    = (data.safeStates || []).map(s => new SafeState(s));
         this.modes         = (data.modes || []).map(m => new Mode(m));
         this.modeTransitions = (data.modeTransitions || []).map(t => new ModeTransition(t));
+        this.safetyActors  = (data.safetyActors || []).map(a => new SafetyActor(a));
         this.interfaces    = (data.interfaces || []).map(i => new InterfaceSpec(i));
         this.assumptions   = (data.assumptions || []).map(a => new Assumption(a));
         this.failureModes  = (data.failureModes || []).map(f => new FailureMode(f));
         this.hsiSignals    = (data.hsiSignals || []).map(s => new HsiSignal(s));
-        this.checklistState = data.checklistState || {}; // { chapterId: { checkId: bool } }
-        this.signoffs      = data.signoffs || {};         // { chapterId: { owner, timestamp } }
+        this.timingChains  = (data.timingChains || []).map(t => new TimingChain(t));
+        this.safeStateReactions = (data.safeStateReactions || []).map(r => new SafeStateReaction(r));
+        this.checklistState = data.checklistState || {}; // { 'discipline:chapterId': { checkId: bool } }
+        this.signoffs      = data.signoffs || {};         // { 'discipline:chapterId': { owner, timestamp } }
+
+        // Last-selected editing context, restored on load so the user
+        // returns where they left off. Minimum-viable back-compat: a
+        // missing key means "no saved context" and the app falls back to
+        // the first editable chapter. Shape: { discipline, chapterId, elementId }.
+        this.lastContext   = data.lastContext || null;
 
         // Persisted ID counters: { itemFunction: 7, mode: 3, ... }.
         // Seeded from existing IDs on load so new items continue the sequence.
@@ -532,6 +723,130 @@ class SyrsDocument {
 
         // Backfill counters from any existing IDs we already loaded.
         this._seedIdCounters();
+
+        // Migrate legacy checklist buckets keyed by bare chapterId into
+        // discipline-scoped keys. See _migrateChecklistState.
+        this._migrateChecklistState();
+
+        // Migrate the legacy single-reaction fields that used to live on a
+        // ModeTransition (detectingElementId / observedSignalId /
+        // reactionBudget) into first-class SafeStateReaction rows, so older
+        // projects keep their allocation and the UI has one editing surface.
+        this._migrateSafeStateReactions();
+    }
+
+    /**
+     * Checklist state is keyed by `discipline:chapterId`, not bare
+     * chapterId — several chapter IDs are reused across disciplines
+     * (ch02_item, ch09_hsi, ch13_calibration, ch17_assumptions) and each
+     * carries DIFFERENT checklist items per discipline. A single flat
+     * bucket per chapterId mixed those ticks. (The logic is generic and
+     * also handles single-discipline chapters correctly.)
+     *
+     * Canonical key helper.
+     */
+    /**
+     * Lift the legacy per-transition reaction fields into SafeStateReaction
+     * rows. Idempotent: only creates a row when the transition carries a
+     * detecting element and no equivalent reaction already exists. The
+     * legacy fields are left in place (harmless) for backward file reads.
+     */
+    _migrateSafeStateReactions() {
+        (this.modeTransitions || []).forEach(tr => {
+            if (!tr || !tr.detectingElementId) return;
+            const dup = this.safeStateReactions.some(r =>
+                r.transitionId === tr.id &&
+                r.detectingElementId === tr.detectingElementId &&
+                r.observedSignalId === (tr.observedSignalId || ''));
+            if (dup) return;
+            const r = new SafeStateReaction({
+                transitionId: tr.id,
+                detectingElementId: tr.detectingElementId,
+                observedSignalId: tr.observedSignalId || '',
+                reactionBudget: tr.reactionBudget || ''
+            });
+            r.id = this.nextId('safeStateReaction');
+            this.safeStateReactions.push(r);
+        });
+    }
+
+    static checklistKey(discipline, chapterId) {
+        return `${discipline}:${chapterId}`;
+    }
+
+    /**
+     * Read the checklist bucket for a chapter in a discipline. Falls back
+     * to the legacy flat (chapterId-only) bucket so a file saved before
+     * the key change still shows its ticks until the next save migrates it.
+     */
+    checklistBucket(discipline, chapterId) {
+        const key = SyrsDocument.checklistKey(discipline, chapterId);
+        if (this.checklistState[key]) return this.checklistState[key];
+        if (this.checklistState[chapterId]) return this.checklistState[chapterId]; // legacy
+        return {};
+    }
+
+    /**
+     * Signoff for a chapter in a discipline. Like the checklist, signoffs
+     * are per-section governance and MUST be unique per discipline — a
+     * chapter ID shared across disciplines (e.g. ch02_item in Item and
+     * System) must not show one discipline's signature in another.
+     *
+     * Keyed by `discipline:chapterId`. Reads the disciplined key only:
+     * a legacy bare-chapterId signoff is NOT used as a fallback, because
+     * it can't be attributed to a discipline without falsely marking
+     * other disciplines signed. Legacy signoffs are migrated by
+     * _migrateSignoffs (below) where attribution is unambiguous, else
+     * dropped. New signatures always write the disciplined key.
+     */
+    signoffFor(discipline, chapterId) {
+        return this.signoffs[SyrsDocument.checklistKey(discipline, chapterId)] || null;
+    }
+
+    /**
+     * One-time migration: for every legacy flat key (a bare chapterId),
+     * fan its ticks out to the disciplined keys of whichever disciplines
+     * actually register that chapter, copying only the item IDs that
+     * belong to each discipline's checklist. The legacy key is then
+     * removed. Requires the Chapters registry to be populated (it is —
+     * chapter files load before any document is constructed).
+     */
+    _migrateChecklistState() {
+        if (typeof Chapters === 'undefined') return;
+        const disciplines = ['item', 'system', 'hardware', 'software'];
+        Object.keys(this.checklistState).forEach(key => {
+            if (key.includes(':')) return;                 // already disciplined
+            const chapterId = key;
+            const legacy = this.checklistState[chapterId] || {};
+            disciplines.forEach(disc => {
+                const spec = Chapters.get(disc, chapterId);
+                if (!spec || !spec.checklist) return;
+                const target = SyrsDocument.checklistKey(disc, chapterId);
+                this.checklistState[target] = this.checklistState[target] || {};
+                spec.checklist.forEach(item => {
+                    if (item.id in legacy) {
+                        this.checklistState[target][item.id] = legacy[item.id];
+                    }
+                });
+            });
+            delete this.checklistState[chapterId];
+        });
+
+        // Signoffs: same shared-key problem. A legacy bare-chapterId
+        // signoff is migrated to the disciplined key ONLY when exactly
+        // one discipline registers that chapter (unambiguous attribution);
+        // otherwise it is dropped rather than risk marking the wrong
+        // discipline signed.
+        Object.keys(this.signoffs).forEach(key => {
+            if (key.includes(':')) return;                 // already disciplined
+            const chapterId = key;
+            const owners = disciplines.filter(disc => Chapters.get(disc, chapterId));
+            if (owners.length === 1) {
+                const target = SyrsDocument.checklistKey(owners[0], chapterId);
+                if (!this.signoffs[target]) this.signoffs[target] = this.signoffs[chapterId];
+            }
+            delete this.signoffs[chapterId];
+        });
     }
 
     /**
@@ -551,7 +866,10 @@ class SyrsDocument {
             ['element',        this.elements],
             ['interfaceSpec',  this.interfaces],
             ['failureMode',    this.failureModes],
-            ['hsiSignal',      this.hsiSignals]
+            ['hsiSignal',      this.hsiSignals],
+            ['safetyActor',    this.safetyActors],
+            ['timingChain',    this.timingChains],
+            ['safeStateReaction', this.safeStateReactions]
         ];
         sources.forEach(([kind, arr]) => {
             const prefix = ID_PREFIX[kind];
@@ -675,6 +993,7 @@ class SyrsDocument {
     toJSON() {
         return {
             schemaVersion: this.schemaVersion,
+            projectName: this.projectName,
             discipline: this.discipline,
             docClass: this.docClass,
             title: this.title,
@@ -685,12 +1004,16 @@ class SyrsDocument {
             safeStates: this.safeStates.map(s => s.toJSON()),
             modes: this.modes.map(m => m.toJSON()),
             modeTransitions: this.modeTransitions.map(t => t.toJSON()),
+            safetyActors: this.safetyActors.map(a => a.toJSON()),
             interfaces: this.interfaces.map(i => i.toJSON()),
             assumptions: this.assumptions.map(a => a.toJSON()),
             failureModes: this.failureModes.map(f => f.toJSON()),
             hsiSignals: this.hsiSignals.map(s => s.toJSON()),
+            timingChains: this.timingChains.map(t => t.toJSON()),
+            safeStateReactions: this.safeStateReactions.map(r => r.toJSON()),
             checklistState: this.checklistState,
             signoffs: this.signoffs,
+            lastContext: this.lastContext,
             idCounters: this.idCounters,
             lexicon: this.lexicon,
             createdAt: this.createdAt,
@@ -790,6 +1113,17 @@ class SyrsDocument {
     declaredSubjectsForChapter(chapter) {
         if (!chapter) return [];
         if (chapter.subjectMode === 'system') return ['the system'];
+        // FSC: an FSR is allocated to the item ("the system"), to an
+        // external measure, or to an assumed driver/operator action. The
+        // subject list is the declared Safety Actors plus "the system",
+        // which is always available even when none are declared.
+        if (chapter.subjectMode === 'actor') {
+            const out = ['the system'];
+            (this.safetyActors || []).forEach(a => {
+                if (a.name && !out.includes(a.name)) out.push(a.name);
+            });
+            return out;
+        }
         if (chapter.subjectMode === 'element') {
             return this.elementsForDiscipline(this.discipline)
                 .map(e => e.name).filter(Boolean);

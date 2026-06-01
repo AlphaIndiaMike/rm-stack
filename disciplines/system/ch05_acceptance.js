@@ -8,7 +8,7 @@
 
 Chapters.register('system', {
     id: 'ch05_acceptance',
-    number: '4',
+    number: '3',
     title: 'Acceptance Requirements (Black-Box Layer)',
     order: 60,
     intro: 'The external contract. Subject is always "the system". Tight budget.',

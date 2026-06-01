@@ -8,7 +8,7 @@
 
 Chapters.register('system', {
     id: 'front_matter',
-    number: '1',
+    number: '',
     title: 'Front Matter',
     order: 10,
     intro: 'Document class, scope, applicable standards, signoff roles, change control.',

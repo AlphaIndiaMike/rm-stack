@@ -93,6 +93,7 @@ class EditorView {
         });
         draft.id = '(draft)';
         if (this.currentChapter.subjectMode === 'system') draft.subject = 'the system';
+        else if (this.currentChapter.subjectMode === 'actor') draft.subject = 'the system';
         else if (this.currentElement) draft.subject = this.currentElement.name;
         return draft;
     }
@@ -104,7 +105,8 @@ class EditorView {
             WelcomePanel.render(container, this.doc);
             chapterTitleEl.textContent = 'Welcome';
             chapterBadgeEl.textContent = '—';
-            chapterBadgeEl.className = 'badge bg-secondary';
+            chapterBadgeEl.className = '';
+            chapterBadgeEl.removeAttribute('style');
             return;
         }
 
@@ -120,8 +122,8 @@ class EditorView {
         const validator = new DocumentValidator(this.doc);
         const pct = validator.chapterCompleteness(chapter);
         chapterBadgeEl.textContent = `${pct}% checklist`;
-        chapterBadgeEl.className = 'badge ' +
-            (pct === 100 ? 'bg-success' : pct >= 50 ? 'bg-warning text-dark' : 'bg-danger');
+        chapterBadgeEl.className = 'count-badge ' +
+            (pct === 100 ? 'ok' : pct >= 50 ? 'warn' : 'over');
         chapterBadgeEl.title = `${pct}% of this chapter's completeness checklist is ticked.`;
 
         // Datalists for autocomplete (owners, producers, consumers, triggers)
@@ -137,8 +139,8 @@ class EditorView {
         if (this.currentElement) {
             const elIntro = document.createElement('div');
             elIntro.className = 'chapter-intro';
-            elIntro.style.background = '#f4f0ff';
-            elIntro.style.borderLeftColor = '#6f42c1';
+            elIntro.style.background = 'var(--bg-elevated)';
+            elIntro.style.borderLeftColor = 'var(--accent)';
             elIntro.innerHTML = `
                 <strong>Element:</strong> ${this.currentElement.name} &nbsp;
                 <strong>ASIL:</strong> ${this.currentElement.asil} &nbsp;
@@ -242,12 +244,22 @@ class EditorView {
         } else if (this.currentChapter.subjectMode === 'system') {
             row1.appendChild(this._makeStaticSlot('Subject', 'the system'));
         } else {
+            const isActor = this.currentChapter.subjectMode === 'actor';
+            // Actor mode always has at least "the system", so the dropdown
+            // is never empty/inactive. If the draft's current subject is a
+            // declared actor that was since removed, keep it in the list so
+            // editing an existing FSR doesn't silently drop its subject.
+            const opts = subjects.slice();
+            if (this.draftReq.subject && !opts.includes(this.draftReq.subject)) {
+                opts.push(this.draftReq.subject);
+            }
             const subjSlot = this._makeSelectSlot('Subject',
-                subjects.map(s => ({ value: s, label: s })),
+                opts.map(s => ({ value: s, label: s })),
                 this.draftReq.subject,
                 v => { this.draftReq.subject = v; this._refreshPreview(wrap); }
             );
-            if (subjects.length === 0) {
+            // Only the element mode can legitimately have zero subjects.
+            if (!isActor && opts.length === 0) {
                 subjSlot.querySelector('select').disabled = true;
                 subjSlot.insertAdjacentHTML('beforeend',
                     '<small class="text-danger">No elements declared yet.</small>');
@@ -323,7 +335,7 @@ class EditorView {
         actions.style.cssText = 'margin-top:0.75rem;display:flex;gap:0.5rem;';
 
         const addBtn = document.createElement('button');
-        addBtn.className = 'btn btn-primary btn-sm';
+        addBtn.className = 'btn-hd btn-hd-primary';
         addBtn.id = 'addReqBtn';
         addBtn.textContent = this.editingExisting ? 'Save Changes' : '+ Add Requirement';
         addBtn.addEventListener('click', () => this._commitRequirement());
@@ -331,7 +343,8 @@ class EditorView {
 
         if (this.editingExisting) {
             const cancelBtn = document.createElement('button');
-            cancelBtn.className = 'btn btn-outline-secondary btn-sm';
+            cancelBtn.className = 'btn-hd btn-hd-outline';
+            cancelBtn.style.cssText = 'background:var(--bg-panel);color:var(--text-mid);border-color:var(--border-mid);';
             cancelBtn.textContent = 'Cancel';
             cancelBtn.addEventListener('click', () => this._cancelEdit());
             actions.appendChild(cancelBtn);
@@ -357,7 +370,8 @@ class EditorView {
         const statement = GrammarValidator.buildStatement(this.draftReq);
         previewEl.textContent = statement || '(choose predicate and fill fields)';
 
-        const ctx = { declaredSubjects: this.doc.declaredSubjectsForChapter(this.currentChapter) };
+        const ctx = { declaredSubjects: this.doc.declaredSubjectsForChapter(this.currentChapter),
+                      allocationOptional: this.currentChapter.subjectMode === 'actor' };
         const { errors, warnings } = GrammarValidator.validate(this.draftReq, ctx);
 
         let html = '';
@@ -624,7 +638,7 @@ class EditorView {
 
     _renderSmartAttestations(wrap) {
         const div = document.createElement('div');
-        div.style.cssText = 'margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid #dee2e6;';
+        div.style.cssText = 'margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--border);';
         div.innerHTML = `<div style="font-size:11px;text-transform:uppercase;color:#666;letter-spacing:0.5px;margin-bottom:0.4rem;">SMART Attestations</div>`;
         GRAMMAR.smartAttestations.forEach(a => {
             const row = document.createElement('div');
@@ -641,7 +655,8 @@ class EditorView {
     }
 
     _commitRequirement() {
-        const ctx = { declaredSubjects: this.doc.declaredSubjectsForChapter(this.currentChapter) };
+        const ctx = { declaredSubjects: this.doc.declaredSubjectsForChapter(this.currentChapter),
+                      allocationOptional: this.currentChapter.subjectMode === 'actor' };
         const { errors } = GrammarValidator.validate(this.draftReq, ctx);
         if (errors.length > 0) {
             alert('Cannot commit: validation errors remain.\n\n' + errors.join('\n'));
@@ -724,7 +739,8 @@ class EditorView {
             const item = document.createElement('div');
             item.className = 'req-item';
 
-            const ctx = { declaredSubjects: this.doc.declaredSubjectsForChapter(this.currentChapter) };
+            const ctx = { declaredSubjects: this.doc.declaredSubjectsForChapter(this.currentChapter),
+                      allocationOptional: this.currentChapter.subjectMode === 'actor' };
             const { errors, warnings } = GrammarValidator.validate(req, ctx);
             const statusDot = errors.length > 0
                 ? '<span class="completeness-dot red" title="Has errors"></span>'
@@ -742,13 +758,13 @@ class EditorView {
                             <span class="impl-slider"></span>
                             <span class="impl-label">${req.implemented ? 'Implemented' : 'Open'}</span>
                         </label>
-                        <button class="req-edit" title="Edit" style="background:none;border:none;color:#0d6efd;cursor:pointer;font-size:13px;padding:0 6px;">✎ Edit</button>
+                        <button class="req-edit" title="Edit" class="req-edit">✎ Edit</button>
                         <button class="req-delete" title="Delete">✕</button>
                     </span>
                 </div>
                 <div>${req.statement}</div>
                 <div class="req-badges">
-                    ${req.externalId ? `<span class="req-badge" style="background:#e7f1ff;color:#0a58ca;" title="External RM tool ID (Polarion / PTC). Not synced.">ext: ${req.externalId}</span>` : ''}
+                    ${req.externalId ? `<span class="req-badge" class="req-badge req-badge-ext" title="External RM tool ID (Polarion / PTC). Not synced.">ext: ${req.externalId}</span>` : ''}
                     ${req.asil ? `<span class="req-badge ${asilClass}" title="${(asilTitles[req.asil] || 'Safety integrity level').replace(/"/g,'&quot;')}">${req.asil}</span>` : ''}
                     ${(req.verification && req.verification.length) ? `<span class="req-badge" title="Verification method(s)">Verif: ${req.verification.join(', ')}</span>` : ''}
                     ${req.dcTarget ? `<span class="req-badge" title="Diagnostic Coverage target.">DC ${req.dcTarget}</span>` : ''}
@@ -762,7 +778,7 @@ class EditorView {
                     ${(req.parentItemFunctions || []).map(id => `<span class="req-badge" title="Item function.">fn ${this.doc.nameForId(id)}</span>`).join('')}
                     ${(req.modeApplicability || []).map(id => `<span class="req-badge" title="Active in this mode.">mode ${this.doc.nameForId(id)}</span>`).join('')}
                     ${(req.allocation || []).map(id => `<span class="req-badge" title="Allocated to.">⊳ ${this.doc.nameForId(id)}</span>`).join('')}
-                    ${req.source ? `<span class="req-badge" style="background:#f0f0f0;color:#999;" title="Legacy free-text source field.">legacy src: ${this._resolveSourceTokens(req.source)}</span>` : ''}
+                    ${req.source ? `<span class="req-badge" class="req-badge req-badge-legacy" title="Legacy free-text source field.">legacy src: ${this._resolveSourceTokens(req.source)}</span>` : ''}
                 </div>
                 ${req.rationale ? `<div style="font-size:11px;color:#666;margin-top:0.3rem;"><em>Rationale:</em> ${req.rationale}</div>` : ''}
             `;
@@ -846,7 +862,7 @@ class EditorView {
     _makeStaticSlot(label, value) {
         const slot = document.createElement('div');
         slot.className = 'req-slot';
-        slot.innerHTML = `<label>${label}</label><input type="text" value="${value}" disabled style="background:#e9ecef;">`;
+        slot.innerHTML = `<label>${label}</label><input type="text" value="${value}" disabled class="slot-disabled">`;
         return slot;
     }
 }

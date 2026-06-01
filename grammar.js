@@ -491,8 +491,11 @@ class GrammarValidator {
             warnings.push(`${req.asil} with inspection-only verification requires justification.`);
         }
 
-        // 13. Allocation required (except for acceptance chapter where subject is "the system")
-        if (!req.allocation && req.subject !== 'the system') {
+        // 13. Allocation required, except where the subject IS the
+        //     allocation: the acceptance chapter (subject "the system")
+        //     and the FSC (subject is a declared Safety Actor, flagged by
+        //     context.allocationOptional).
+        if (!req.allocation && req.subject !== 'the system' && !context.allocationOptional) {
             warnings.push('No element allocation specified.');
         }
 

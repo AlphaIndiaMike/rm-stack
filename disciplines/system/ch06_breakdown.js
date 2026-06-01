@@ -49,12 +49,12 @@ class ModeDiagnosticsView {
         const block = document.createElement('div');
         block.style.marginBottom = '0.75rem';
         const h = document.createElement('div');
-        h.style.cssText = 'font-size:11px;text-transform:uppercase;color:#666;letter-spacing:0.5px;margin-bottom:0.3rem;';
+        h.style.cssText = 'font-size:11px;text-transform:uppercase;color:var(--text-dim);letter-spacing:0.5px;margin-bottom:0.3rem;';
         h.innerHTML = `${title} <span class="count-badge">${issues.length}</span>`;
         block.appendChild(h);
         if (issues.length === 0) {
             const ok = document.createElement('div');
-            ok.style.cssText = 'font-size:12px;color:#198754;padding:0.25rem 0.5rem;';
+            ok.style.cssText = 'font-size:12px;color:var(--green);padding:0.25rem 0.5rem;';
             ok.textContent = '✓ ' + emptyText;
             block.appendChild(ok);
             return block;
@@ -173,19 +173,19 @@ class ModeSimulatorView {
 
         // Control row: [system box] — [trigger ▾] [▶ Step] [Reset]
         const row = document.createElement('div');
-        row.style.cssText = 'display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;background:#f8f9fa;padding:0.6rem 0.75rem;border-radius:6px;border:1px solid #dee2e6;';
+        row.style.cssText = 'display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;background:var(--bg-elevated);padding:0.6rem 0.75rem;border-radius:6px;border:1px solid var(--border);';
 
         const stateBox = document.createElement('div');
-        stateBox.style.cssText = 'padding:8px 14px;background:#0d6efd;color:#fff;border-radius:4px;font-size:13px;min-width:160px;text-align:center;line-height:1.3;';
+        stateBox.style.cssText = 'padding:8px 14px;background:var(--accent);color:#fff;border-radius:4px;font-size:13px;min-width:160px;text-align:center;line-height:1.3;';
         row.appendChild(stateBox);
 
         const arrow = document.createElement('span');
         arrow.textContent = '—';
-        arrow.style.color = '#6c757d';
+        arrow.style.color = 'var(--text-dim)';
         row.appendChild(arrow);
 
         const select = document.createElement('select');
-        select.className = 'form-select form-select-sm';
+        select.className = 'sim-select';
         select.style.maxWidth = '220px';
         const def = document.createElement('option');
         def.value = '';
@@ -199,13 +199,13 @@ class ModeSimulatorView {
         row.appendChild(select);
 
         const play = document.createElement('button');
-        play.className = 'btn btn-sm btn-success';
+        play.className = 'btn-add sim-btn-go';
         play.textContent = '▶ Step';
         play.disabled = triggers.length === 0;
         row.appendChild(play);
 
         const reset = document.createElement('button');
-        reset.className = 'btn btn-sm btn-outline-secondary';
+        reset.className = 'btn-add';
         reset.textContent = 'Reset';
         row.appendChild(reset);
 
@@ -226,11 +226,11 @@ class ModeSimulatorView {
                 <div style="font-size:10px;opacity:0.8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;">System state</div>
                 <div style="font-weight:600;">${ch6Esc(name)}</div>`;
             const palette = {
-                ok:        { bg: '#d1e7dd', border: '#198754', color: '#0f5132' },
-                'no-match':{ bg: '#f8d7da', border: '#dc3545', color: '#842029' },
-                broken:    { bg: '#f8d7da', border: '#dc3545', color: '#842029' },
-                idle:      { bg: '#e9ecef', border: '#ced4da', color: '#495057' }
-            }[this.message.kind] || { bg: '#e9ecef', border: '#ced4da', color: '#495057' };
+                ok:        { bg: 'var(--green-bg)', border: 'var(--green)', color: 'var(--green)' },
+                'no-match':{ bg: 'var(--red-bg)', border: 'var(--red)', color: 'var(--red)' },
+                broken:    { bg: 'var(--red-bg)', border: 'var(--red)', color: 'var(--red)' },
+                idle:      { bg: 'var(--bg-hover)', border: 'var(--border-mid)', color: 'var(--text-mid)' }
+            }[this.message.kind] || { bg: 'var(--bg-hover)', border: 'var(--border-mid)', color: 'var(--text-mid)' };
             msg.style.background  = palette.bg;
             msg.style.borderColor = palette.border;
             msg.style.color       = palette.color;
@@ -321,12 +321,12 @@ class ModeRequirementGenerator {
         const existing = transitions.length - eligible.length - (transitions.length - complete.length);
 
         const summary = document.createElement('div');
-        summary.style.cssText = 'font-size:12px;color:#555;margin-bottom:0.5rem;';
+        summary.style.cssText = 'font-size:12px;color:var(--text-mid);margin-bottom:0.5rem;';
         summary.innerHTML = `${transitions.length} transition(s) declared, ${complete.length} fully specified, ${existing} already in Chapter 4, <strong>${eligible.length}</strong> ready to generate.`;
         wrap.appendChild(summary);
 
         const btn = document.createElement('button');
-        btn.className = 'btn btn-sm btn-primary';
+        btn.className = 'btn-add btn-generate';
         btn.textContent = `Generate ${eligible.length} requirement(s) → Chapter 4`;
         btn.disabled = eligible.length === 0;
         wrap.appendChild(btn);
@@ -341,12 +341,12 @@ class ModeRequirementGenerator {
             setTimeout(() => this.onChange(), 0);
             status.style.display = 'block';
             if (n === 0) {
-                status.style.background = '#e9ecef';
-                status.style.color      = '#495057';
+                status.style.background = 'var(--bg-hover)';
+                status.style.color      = 'var(--text-mid)';
                 status.textContent = 'Nothing to do — every fully-specified transition is already in Chapter 4.';
             } else {
-                status.style.background = '#d1e7dd';
-                status.style.color      = '#0f5132';
+                status.style.background = 'var(--green-bg)';
+                status.style.color      = 'var(--green)';
                 status.textContent = `Added ${n} requirement(s) to Chapter 4 (Acceptance). Click "4. Acceptance Requirements" in the outline to see them.`;
             }
         });
@@ -372,7 +372,7 @@ function ch6Esc(s) {
 
 Chapters.register('system', {
     id: 'ch06_breakdown',
-    number: '5',
+    number: '4',
     title: 'System Breakdown',
     order: 70,
     intro: 'Elements declared here. Chapter 6 is auto-generated from this list. The mode simulator below lets you walk the state machine you defined in the Mode Transitions table.',
@@ -387,8 +387,6 @@ Chapters.register('system', {
     checklist: [
         { id: 'c6a', text: 'Element count within expected range (10–30 for ADAS).',
           help: 'Below 10 = under-decomposed (most elements will overflow the 4–13 per-leaf budget); above 30 = consider grouping into subsystems.' },
-        { id: 'c6b', text: 'Every element has unique ID, name, purpose, inherited ASIL.',
-          help: 'Elements table row: ID auto-generated, name (no spaces), one-sentence purpose, ASIL.' },
         { id: 'c6c', text: 'Allocation matrix covers every item function to ≥1 element.',
           help: 'Element.allocatedItemFunctions stores this. Right-pane Item Functions shows E:N counts.' },
         { id: 'c6d', text: 'No orphan elements (every element has ≥1 allocated item function).',
@@ -396,7 +394,7 @@ Chapters.register('system', {
         { id: 'c6e', text: 'ASIL decomposition decisions listed with independence arguments.',
           help: 'When ASIL D decomposes (ISO 26262-9:5), the independence argument must be documented.' },
         { id: 'c6f', text: 'Mode model covers power-off, startup, nominal, degraded, safe, shutdown.' },
-        { id: 'c6g', text: 'Every mode transition has ID, source, target, trigger.',
+        { id: 'c6g', text: 'Every mode transition has source, target, trigger.',
           help: 'Mode Transitions table. The forgotten-transitions diagnostic above flags incomplete edges.' },
         { id: 'c6h', text: 'Every safe state from Chapter 3 present in mode model.',
           help: 'Each declared SafeState must reference at least one Mode that realises it.' }

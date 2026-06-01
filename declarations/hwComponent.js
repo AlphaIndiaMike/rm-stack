@@ -17,10 +17,11 @@ Declarations.register('hwComponent', {
         'Part #':       'Manufacturer part number for traceability and BOM matching.',
         'Purpose':      'One-sentence role in the architecture.',
         'λ (FIT)':      'Failure rate in FIT (failures per 10⁹ hours). Feeds FMEDA / PMHF computations.',
+        'Implements':   'Multi-select. The system element(s) this HW component implements. A System TSR allocated to HW can then be taken over into a derived HW requirement on this component (see HW Requirements Inputs → Generate).',
         'ASIL':         'ASIL allocated to this component.'
     },
-    headers: ['ID', 'Name', 'Part #', 'Purpose', 'λ (FIT)', 'ASIL', ''],
-    gridCols: '90px 1fr 130px 1fr 80px 80px 40px',
+    headers: ['ID', 'Name', 'Part #', 'Purpose', 'λ (FIT)', 'Implements', 'ASIL', ''],
+    gridCols: '90px 1fr 130px 1fr 80px 170px 80px 40px',
     getList: doc => doc.elements.filter(e => e.componentKind === 'hw'),
     add: doc => {
         const el = new Element();
@@ -49,7 +50,22 @@ Declarations.register('hwComponent', {
         <input type="text" value="${(item.partNumber||'').replace(/"/g,'&quot;')}" placeholder="Part number">
         <input type="text" value="${(item.purpose||'').replace(/"/g,'&quot;')}" placeholder="Role in the architecture">
         <input type="number" min="0" step="0.1" value="${item.failureRate || 0}" title="FIT (failures / 10⁹ h)">
+        <span class="ms-mount" data-ms="impl"></span>
         <select title="ASIL allocated to this component.">${GRAMMAR.asilLevels.map(a=>`<option ${item.asil===a?'selected':''}>${a}</option>`).join('')}</select>
         <button class="del-btn req-delete" title="Delete this component">✕</button>
-    `
+    `,
+    postRender: (row, item, doc, refresh) => {
+        const mount = row.querySelector('.ms-mount[data-ms="impl"]');
+        if (!mount) return;
+        const opts = doc.elementsForDiscipline('system').map(e => ({
+            value: e.id, label: e.name || `(unnamed ${e.id})`
+        }));
+        const ms = new MultiSelectDropdown(
+            opts, item.implementsElementIds || [],
+            newRefs => { item.implementsElementIds = newRefs; },
+            { unitLabel: 'system element',
+              emptyLabel: 'No system elements declared yet.',
+              onClose: refresh });
+        mount.replaceWith(ms.element);
+    }
 });

@@ -9,7 +9,7 @@
 
 Chapters.register('system', {
     id: 'ch12_safety_analyses',
-    number: '4',
+    number: '8',
     title: 'Safety Analyses Summary',
     order: 130,
     intro: 'FMEA, FTA, DFA summaries with links to full analyses.',
@@ -27,6 +27,8 @@ Chapters.register('system', {
         { id: 'c12e', text: 'Every latent fault has mechanism or justified acceptance.',
           help: 'A latent fault needs a detection mechanism with adequate DC, or explicit justified acceptance.' },
         { id: 'c12f', text: 'Residual risk argument present for ASIL C/D.',
-          help: 'Quantitative argument required: PMHF below ASIL target (1e-7/h for C, 1e-8/h for D).' }
+          help: 'Quantitative argument required: PMHF below ASIL target (1e-7/h for C, 1e-8/h for D).' },
+        { id: 'c12g', text: 'Target values for HW architectural metrics set per ASIL (SPFM, LFM, PMHF).',
+          help: 'ISO 26262-4:6 requires the system level to SET the metric targets (e.g. SPFM ≥99%/≥97%/≥90%, LFM ≥90%/≥80%/≥60%, PMHF ≤1e-8/≤1e-7 per ASIL D/C/B). The Hardware discipline then carries them as obligations and the computation/FMEDA is external.' }
     ]
 });

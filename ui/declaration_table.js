@@ -113,7 +113,7 @@ const DeclarationTable = {
         });
 
         const btn = document.createElement('button');
-        btn.className = 'btn btn-sm btn-outline-primary btn-add';
+        btn.className = 'btn-add';
         btn.textContent = `+ Add ${config.singular}`;
         btn.style.marginTop = '0.5rem';
         btn.addEventListener('click', () => {

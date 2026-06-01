@@ -35,11 +35,11 @@ class ElementCoverageDiagnostic {
         }
 
         const table = document.createElement('div');
-        table.style.cssText = 'border:1px solid #dee2e6;border-radius:4px;overflow:hidden;';
+        table.style.cssText = 'border:1px solid var(--border);border-radius:4px;overflow:hidden;';
         const cols = '1.5fr 80px 100px 1fr 1fr 1fr 1.5fr';
 
         const head = document.createElement('div');
-        head.style.cssText = `display:grid;grid-template-columns:${cols};gap:0.4rem;padding:0.5rem 0.75rem;background:#f8f9fa;font-size:11px;text-transform:uppercase;color:#666;font-weight:600;border-bottom:1px solid #dee2e6;`;
+        head.style.cssText = `display:grid;grid-template-columns:${cols};gap:0.4rem;padding:0.5rem 0.75rem;background:var(--bg-elevated);font-size:11px;text-transform:uppercase;color:var(--text-dim);font-weight:600;border-bottom:1px solid var(--border);`;
         head.innerHTML = `
             <div>Element</div>
             <div>ASIL</div>
@@ -70,9 +70,9 @@ class ElementCoverageDiagnostic {
                 : '✗ ' + issues.join(', ');
 
             const row = document.createElement('div');
-            row.style.cssText = `display:grid;grid-template-columns:${cols};gap:0.4rem;padding:0.5rem 0.75rem;font-size:13px;border-bottom:1px solid #f0f0f0;cursor:pointer;align-items:center;`;
+            row.style.cssText = `display:grid;grid-template-columns:${cols};gap:0.4rem;padding:0.5rem 0.75rem;font-size:13px;border-bottom:1px solid var(--border);cursor:pointer;align-items:center;`;
             row.innerHTML = `
-                <div style="font-weight:500;color:#0d6efd;">${(c.name || '(unnamed)')}</div>
+                <div style="font-weight:500;color:var(--accent);">${(c.name || '(unnamed)')}</div>
                 <div>${c.asil || 'QM'}</div>
                 <div>${c.reqCount} <span class="completeness-dot ${status}" style="margin-left:6px;"></span></div>
                 <div>${c.allocatedCount}</div>
@@ -80,7 +80,7 @@ class ElementCoverageDiagnostic {
                 <div>${hasAccept ? '✓' : '—'}</div>
                 <div title="${statusLabel.replace(/"/g,'&quot;')}">${statusLabel}</div>
             `;
-            row.addEventListener('mouseenter', () => row.style.background = '#f8f9fa');
+            row.addEventListener('mouseenter', () => row.style.background = 'var(--bg-elevated)');
             row.addEventListener('mouseleave', () => row.style.background = '');
             row.addEventListener('click', () => {
                 // Routes through main's onChapterSelected so left pane updates
@@ -103,7 +103,7 @@ class ElementCoverageDiagnostic {
 
 Chapters.register('system', {
     id: 'ch07_elements',
-    number: '6',
+    number: '5',
     title: 'Technical Safety Requirements (White-Box Layer)',
     order: 80,
     intro: 'Technical Safety Concept (ISO 26262-4:6 / ASPICE SYS.3). TSRs refine the black-box acceptance contract against the system architecture and are allocated to architectural elements. Auto-expands one sub-chapter per declared element; subject = element name. Each TSR carries its HW/SW allocation — that allocation is the handoff to the HW-RS / SW-RS documents.',
@@ -121,8 +121,6 @@ Chapters.register('system', {
         { id: 'c7d', text: 'Every TSR allocated to HW, SW or both (the HW-RS / SW-RS handoff).',
           help: 'Set "HW/SW allocation" on each TSR. The SW/HW Requirements Inputs chapters flag TSRs allocated to that discipline with nothing deriving from them.' },
         { id: 'c7e', text: 'Every TSR traces up to a parent acceptance requirement.',
-          help: 'Parent acceptance req(s) attribute. Keeps the SG → FSR → acceptance → TSR chain closed.' },
-        { id: 'c7f', text: 'Every TSR passes SMART and predicate/EARS checks.',
-          help: 'The builder validates both as you type.' }
+          help: 'Parent acceptance req(s) attribute. Keeps the SG → FSR → acceptance → TSR chain closed.' }
     ]
 });

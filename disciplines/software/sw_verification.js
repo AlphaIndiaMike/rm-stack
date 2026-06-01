@@ -48,15 +48,15 @@ class SwTraceStatusReport {
             <strong>${total}</strong> SW requirement(s) &nbsp;·&nbsp;
             <strong>${traced}</strong> traced &nbsp;·&nbsp;
             <strong>${withMethod}</strong> with a verification method &nbsp;·&nbsp;
-            <strong style="color:${implemented === total ? '#198754' : '#fd7e14'};">${implemented}/${total}</strong> implemented
+            <strong style="color:${implemented === total ? 'var(--green)' : 'var(--amber)'};">${implemented}/${total}</strong> implemented
         `;
         wrap.appendChild(summary);
 
         const table = document.createElement('div');
-        table.style.cssText = 'border:1px solid #dee2e6;border-radius:4px;overflow:hidden;';
+        table.style.cssText = 'border:1px solid var(--border);border-radius:4px;overflow:hidden;';
         const cols = '105px 1fr 1.1fr 95px 95px 105px';
         const head = document.createElement('div');
-        head.style.cssText = `display:grid;grid-template-columns:${cols};gap:0.4rem;padding:0.5rem 0.75rem;background:#f8f9fa;font-size:11px;text-transform:uppercase;color:#666;font-weight:600;border-bottom:1px solid #dee2e6;`;
+        head.style.cssText = `display:grid;grid-template-columns:${cols};gap:0.4rem;padding:0.5rem 0.75rem;background:var(--bg-elevated);font-size:11px;text-transform:uppercase;color:var(--text-dim);font-weight:600;border-bottom:1px solid var(--border);`;
         head.innerHTML = `<div>SW Req</div><div>Statement</div><div>Parent(s)</div><div>Integrity</div><div>Verif</div><div>Implemented</div>`;
         table.appendChild(head);
 
@@ -74,19 +74,19 @@ class SwTraceStatusReport {
             if (safetyParents.length) {
                 const ok = safetyParents.some(p => (p.asil || '').trim() === lvl);
                 intHtml = ok
-                    ? `<span style="color:#198754;font-weight:600;">✓ ${lvl || 'QM'}</span>`
-                    : `<span style="color:#dc3545;font-weight:600;">✗ ${lvl || 'QM'} ≠ parent</span>`;
+                    ? `<span style="color:var(--green);font-weight:600;">✓ ${lvl || 'QM'}</span>`
+                    : `<span style="color:var(--red);font-weight:600;">✗ ${lvl || 'QM'} ≠ parent</span>`;
             }
             const row = document.createElement('div');
-            row.style.cssText = `display:grid;grid-template-columns:${cols};gap:0.4rem;padding:0.5rem 0.75rem;font-size:13px;border-bottom:1px solid #f0f0f0;align-items:center;`;
+            row.style.cssText = `display:grid;grid-template-columns:${cols};gap:0.4rem;padding:0.5rem 0.75rem;font-size:13px;border-bottom:1px solid var(--border);align-items:center;`;
             row.innerHTML = `
-                <div style="font-family:monospace;color:#0d6efd;">${r.id}</div>
+                <div style="font-family:monospace;color:var(--accent);">${r.id}</div>
                 <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${stmt.replace(/"/g,'&quot;')}">${stmt}</div>
-                <div style="font-family:monospace;font-size:11px;color:${parents === '— none —' ? '#dc3545' : '#555'};">${parents}</div>
+                <div style="font-family:monospace;font-size:11px;color:${parents === '— none —' ? 'var(--red)' : 'var(--text-mid)'};">${parents}</div>
                 <div style="font-size:11px;">${intHtml}</div>
-                <div>${(r.verification && r.verification.length) ? r.verification.join(", ") : "<span style=\"color:#dc3545;\">—</span>"}</div>
+                <div>${(r.verification && r.verification.length) ? r.verification.join(", ") : "<span style=\"color:var(--red);\">—</span>"}</div>
                 <div>${r.implemented
-                    ? '<span style="color:#198754;font-weight:600;">✓ done</span>'
+                    ? '<span style="color:var(--green);font-weight:600;">✓ done</span>'
                     : '<span style="color:#999;">○ open</span>'}</div>
             `;
             table.appendChild(row);

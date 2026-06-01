@@ -7,7 +7,7 @@
 
 Chapters.register('system', {
     id: 'ch15_cyber',
-    number: '12',
+    number: '11',
     title: 'Cybersecurity Interaction',
     order: 160,
     intro: 'Safety-security interaction points. Reference to TARA.',

@@ -8,7 +8,7 @@
 
 Chapters.register('system', {
     id: 'ch16_hmi',
-    number: '13',
+    number: '12',
     title: 'Human Factors / HMI and Warning Concept',
     order: 170,
     intro: 'Driver warnings, takeover requests, degradation notifications.',

@@ -8,7 +8,7 @@
 
 Chapters.register('system', {
     id: 'ch17_assumptions',
-    number: '14',
+    number: '13',
     title: 'Assumptions, Open Points, SEooC Conditions',
     order: 180,
     intro: 'Every assumption owned, every open point with closure target.',

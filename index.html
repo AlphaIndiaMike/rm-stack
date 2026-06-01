@@ -5,38 +5,61 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Requirement Studio</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link href="styles.css" rel="stylesheet">
 </head>
 <body>
     <!-- Top bar -->
-    <nav class="navbar navbar-dark bg-dark px-3">
-        <div class="d-flex align-items-center gap-3 w-100">
-            <span class="navbar-brand mb-0 h1">Requirement Studio</span>
-
-            <div class="d-flex align-items-center gap-2">
-                <label for="disciplineSelect" class="text-white small mb-0">Discipline:</label>
-                <!-- Populated at startup from the Disciplines registry — see main.js -->
-                <select id="disciplineSelect" class="form-select form-select-sm"></select>
+    <header class="app-header">
+        <!-- Logo -->
+        <div class="logo">
+            <div class="logo-mark">RS</div>
+            <div>
+                <div class="logo-text">Requirement Studio</div>
             </div>
+        </div>
 
-            <div class="d-flex align-items-center gap-2">
-                <label for="docClassSelect" class="text-white small mb-0">Class:</label>
-                <select id="docClassSelect" class="form-select form-select-sm">
+        <!-- Centre controls -->
+        <div class="header-controls">
+            <div class="header-control-group">
+                <span class="header-control-label">Discipline</span>
+                <!-- Populated at startup from the Disciplines registry — see main.js -->
+                <select id="disciplineSelect"></select>
+            </div>
+            <div class="header-control-group">
+                <span class="header-control-label">Class</span>
+                <select id="docClassSelect">
                     <option value="simple">Simple (≤200)</option>
                     <option value="complex" selected>Complex (≤300)</option>
                     <option value="adas">ADAS Platform (≤400)</option>
                 </select>
             </div>
-
-            <div id="topBarActions" class="ms-auto d-flex gap-2 d-none">
-                <input type="file" id="loadJsonInput" accept=".json" style="display:none;">
-                <button id="exportTxtButton" class="btn btn-sm btn-outline-light">Export TXT</button>
-                <button id="exportPdfButton" class="btn btn-sm btn-outline-light">Export PDF</button>
-                <button id="loadJsonButton" class="btn btn-sm btn-outline-light">Load Project</button>
-                <button id="saveJsonButton" class="btn btn-sm btn-primary">Save Project</button>
-            </div>
         </div>
-    </nav>
+
+        <!-- Project name pill (absolutely centred in the header). Text and
+             named/unnamed state are set on boot, load and save by main.js. -->
+        <span id="projectNamePill" class="project-name-pill unnamed" title="Project name — set when you save">untitled</span>
+
+        <!-- Right-side actions -->
+        <div class="header-actions">
+            <button id="toggleLeftPane" class="btn-pane-toggle"
+                title="Show/hide the outline pane">☰ Outline</button>
+            <button id="toggleRightPane" class="btn-pane-toggle"
+                title="Show/hide the model summary pane">Summary ☰</button>
+
+            <input type="file" id="loadJsonInput" accept=".json" style="display:none;">
+            <div id="topBarActions" class="header-actions hidden">
+                <button id="exportTxtButton" class="btn-hd btn-hd-outline">Export TXT</button>
+                <button id="exportPdfButton" class="btn-hd btn-hd-outline">Export PDF</button>
+                <button id="loadJsonButton"  class="btn-hd btn-hd-outline">Load Project</button>
+                <button id="saveJsonButton"  class="btn-hd btn-hd-primary">Save Project</button>
+            </div>
+
+            <span class="app-version" title="Application version">v1.4.2</span>
+        </div>
+    </header>
 
     <!-- Three-pane layout -->
     <div class="three-pane-container">
@@ -44,7 +67,7 @@
         <aside id="leftPane" class="pane pane-left">
             <div class="pane-header">
                 <h6 class="mb-0">Document Outline</h6>
-                <span id="budgetCounter" class="badge bg-secondary">0 / 300</span>
+                <span id="budgetCounter" class="budget-badge">0 / 300</span>
             </div>
             <div id="outlineContainer" class="pane-body"></div>
         </aside>
@@ -53,7 +76,7 @@
         <main id="centerPane" class="pane pane-center">
             <div id="chapterPaneHeader" class="pane-header d-none">
                 <h6 id="chapterTitle" class="mb-0">Select a chapter</h6>
-                <span id="chapterCompleteness" class="badge bg-secondary">—</span>
+                <span id="chapterCompleteness" class="count-badge">—</span>
             </div>
             <div id="editorContainer" class="pane-body"></div>
         </main>
@@ -103,8 +126,10 @@
     <script src="declarations/hwComponent.js"></script>
     <script src="declarations/swUnit.js"></script>
     <script src="declarations/interface.js"></script>
+    <script src="declarations/internalInterface.js"></script>
     <script src="declarations/mode.js"></script>
     <script src="declarations/modeTransition.js"></script>
+    <script src="declarations/safetyActor.js"></script>
     <script src="declarations/itemFunction.js"></script>
     <script src="declarations/safetyGoal.js"></script>
     <script src="declarations/safeState.js"></script>
@@ -126,13 +151,11 @@
     <script src="disciplines/system/ch01_scope.js"></script>
     <script src="disciplines/system/ch02_item.js"></script>
     <script src="disciplines/system/ch03_sg.js"></script>
-    <script src="disciplines/system/ch04_fsc.js"></script>
     <script src="disciplines/system/ch05_acceptance.js"></script>
     <script src="disciplines/system/ch06_breakdown.js"></script>
     <script src="disciplines/system/ch07_elements.js"></script>
     <script src="disciplines/system/ch09_hsi.js"></script>
-    <script src="disciplines/system/ch10_hw.js"></script>
-    <script src="disciplines/system/ch11_sw.js"></script>
+    <script src="disciplines/system/ch_timing.js"></script>
     <script src="disciplines/system/ch12_safety_analyses.js"></script>
     <script src="disciplines/system/ch13_calibration.js"></script>
     <script src="disciplines/system/ch14_env.js"></script>

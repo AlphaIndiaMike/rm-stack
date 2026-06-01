@@ -33,10 +33,11 @@ Declarations.register('interface', {
     },
     headers: ['ID', 'Name', 'Kind', 'Node A', 'Direction', 'Node B', 'Protocol', '▸', ''],
     gridCols: '90px 1fr 90px 1fr 130px 1fr 110px 30px 40px',
-    getList: doc => doc.interfaces,
+    getList: doc => doc.interfaces.filter(i => (i.scope || 'external') === 'external'),
     add: doc => {
         const iface = new InterfaceSpec();
         iface.id = doc.nextId('interfaceSpec');
+        iface.scope = 'external';
         doc.interfaces.push(iface);
     },
     remove: (doc, id) => { doc.interfaces = doc.interfaces.filter(x => x.id !== id); },
@@ -80,7 +81,7 @@ Declarations.register('interface', {
             </select>
             <input type="text" list="lex-consumers" value="${(item.consumer||'').replace(/"/g,'&quot;')}" placeholder="Node B">
             <input type="text" value="${(item.protocol||'').replace(/"/g,'&quot;')}" placeholder="CAN, LIN, ...">
-            <button type="button" class="if-expand" data-if-id="${item.id}" title="Edit SMART details (data type, range, period, jitter, failure behaviour)" style="background:none;border:1px solid #ced4da;border-radius:3px;cursor:pointer;font-size:13px;line-height:1;padding:2px 6px;">▸</button>
+            <button type="button" class="if-expand" data-if-id="${item.id}" title="Edit SMART details (data type, range, period, jitter, failure behaviour)" class="if-expand-btn">▸</button>
             <button class="del-btn req-delete" title="Delete this interface">✕</button>
         `;
     },
@@ -97,7 +98,7 @@ Declarations.register('interface', {
             }
             const detail = document.createElement('div');
             detail.className = 'if-detail-row';
-            detail.style.cssText = 'grid-column: 1 / -1; padding: 0.6rem 1rem; background: #f8f9fa; border-left: 3px solid #0d6efd; margin: 0 0 4px 0;';
+            // Styled by .if-detail-row in styles.css
             const f = (k, ph) => `<label style="font-size:11px;">${k}<input type="text" data-if-detail="${k}" value="${(item[k]||'').replace(/"/g,'&quot;')}" placeholder="${ph}" style="display:block;width:100%;font-size:12px;padding:3px 6px;"></label>`;
             detail.innerHTML = `
                 <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.5rem;">

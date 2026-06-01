@@ -6,7 +6,7 @@
 
 Chapters.register('system', {
     id: 'ch01_scope',
-    number: '2',
+    number: '',
     title: 'Scope, Purpose, Standards, Tailoring',
     order: 20,
     intro: 'Purpose of this document, what it is and is not, related documents, glossary.',

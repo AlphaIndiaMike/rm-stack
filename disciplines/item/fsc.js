@@ -1,9 +1,13 @@
 /**
  * disciplines/item/fsc.js
  *
- * Item Chapter 4 — Functional Safety Concept. REUSES chapter id
- * 'ch04_fsc' from the System discipline. FSRs written here appear in
- * the System view's FSC chapter and vice versa. Per ISO 26262-3:7.
+ * Item Chapter 4 — Functional Safety Concept (ISO 26262-3:7). This is an
+ * ITEM-LEVEL work product and is intentionally NOT surfaced in the System
+ * discipline: Part 3 produces the FSC/FSRs at the item level; Part 4
+ * (System) refines them into Technical Safety Requirements (ch07). FSRs
+ * authored here are still reachable by chapter id, so the System
+ * Acceptance and TSR chapters can reference them as parents without FSC
+ * appearing in — or counting against — the System discipline.
  */
 
 Chapters.register('item', {
@@ -11,9 +15,10 @@ Chapters.register('item', {
     number: '4',
     title: 'Functional Safety Concept',
     order: 40,
-    intro: 'FSRs realising each Safety Goal. Warning, degradation, emergency operation strategies.',
+    intro: 'Tier-1 / ASPICE SYS.1 layer: FSRs realising each Safety Goal, each allocated to a subject — the system (the item), an external measure, or an assumed driver/operator action (declared in the Safety Actors table below). Warning, degradation and emergency-operation strategies are captured here too. Allocation to preliminary architecture is a design activity and out of scope.',
     allowsRequirements: true,
-    subjectMode: 'system',
+    subjectMode: 'actor',
+    declarations: ['safetyActor'],
     requirementBudget: { min: 5, max: 30 },
     checklist: [
         { id: 'i4a', text: 'Every Safety Goal has ≥1 FSR.' },

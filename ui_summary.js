@@ -51,13 +51,13 @@ class SummaryView {
 
         const items = budgets.map(b => {
             const isActive = b.id === active;
-            const barColor = b.overBudget ? '#dc3545'
-                : b.percent > 80 ? '#fd7e14' : '#198754';
+            const barColor = b.overBudget ? 'var(--red)'
+                : b.percent > 80 ? 'var(--amber)' : 'var(--green)';
             const text = `
                 <span style="display:block;">
                     ${isActive ? '▸ ' : ''}${b.label}
                 </span>
-                <span style="display:block;width:130px;height:6px;margin-top:4px;background:#e9ecef;border-radius:3px;overflow:hidden;">
+                <span class="track" style="width:130px;">
                     <span style="display:block;height:100%;background:${barColor};width:${Math.min(100, b.percent)}%;"></span>
                 </span>`;
             return {

@@ -29,7 +29,6 @@ Chapters.register('software', {
           help: 'Applies to requirements whose System parent carries an ASIL/SIL.' },
         { id: 'swf4', text: 'Each requirement traces to a System parent and (if safety) carries the parent\'s ASIL/SIL unchanged.',
           help: 'No decomposition at this hop — the Inputs coverage flags integrity gaps.' },
-        { id: 'swf5', text: 'Subject is a declared SW unit or "the software" — not an internal data structure (that is detailed design).' },
-        { id: 'swf6', text: 'Every requirement passes SMART and predicate/EARS checks and has a verification method.' }
+        { id: 'swf5', text: 'Subject is a declared SW unit or "the software" — not an internal data structure (that is detailed design).' }
     ]
 });

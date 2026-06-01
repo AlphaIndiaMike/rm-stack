@@ -7,7 +7,7 @@
 
 Chapters.register('system', {
     id: 'ch14_env',
-    number: '11',
+    number: '10',
     title: 'Environmental and Operational Envelope',
     order: 150,
     intro: 'Temperature, voltage, EMC, vibration, ingress.',

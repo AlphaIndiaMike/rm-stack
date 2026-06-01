@@ -37,11 +37,14 @@ class OutlineView {
     }
 
     /** A chapter belongs in the outline (vs. reminders) iff the user
-     *  actually inputs something there. */
+     *  actually inputs something there. `authoring: true` is an explicit
+     *  opt-in for tool chapters whose input is via extraWidgets rather
+     *  than declarations / a requirement builder (e.g. Timing Analysis). */
     static isAuthoringChapter(chapter) {
         return !!(chapter.allowsRequirements
                 || (chapter.declarations && chapter.declarations.length > 0)
-                || chapter.autoExpand);
+                || chapter.autoExpand
+                || chapter.authoring);
     }
 
     render(container) {
@@ -105,13 +108,15 @@ class OutlineView {
 
         const status = validator.chapterStatus(chapter);
         const pct = validator.chapterCompleteness(chapter);
+        div.classList.add('status-' + status);
+        div.title = pct + '% complete';
 
         // Trailing label differs by section:
         //   - Authoring: requirement count when non-zero
         //   - Reminders: checklist progress as done/total
         let trailingLabel = '';
         if (isReminder) {
-            const state = this.doc.checklistState[chapter.id] || {};
+            const state = this.doc.checklistBucket(this.doc.discipline, chapter.id);
             const total = (chapter.checklist || []).length;
             const done  = (chapter.checklist || []).filter(c => state[c.id]).length;
             if (total > 0) trailingLabel = `<span class="outline-count">${done}/${total}</span>`;
@@ -126,7 +131,6 @@ class OutlineView {
                 ${chapter.title}
                 ${trailingLabel}
             </span>
-            <span class="completeness-dot ${status}" title="${pct}% complete"></span>
         `;
 
         div.addEventListener('click', () => this.onSelect(chapter.id, null));
@@ -144,6 +148,7 @@ class OutlineView {
         let statusClass = 'red';
         if (reqCount >= 4 && reqCount <= 13) statusClass = 'green';
         else if (reqCount > 0) statusClass = 'orange';
+        div.classList.add('status-' + statusClass);
 
         div.innerHTML = `
             <span>
@@ -151,7 +156,6 @@ class OutlineView {
                 ${element.name || '(unnamed element)'}
                 <span class="outline-count">(${reqCount})</span>
             </span>
-            <span class="completeness-dot ${statusClass}"></span>
         `;
 
         div.addEventListener('click', () => this.onSelect(chapter.id, element.id));

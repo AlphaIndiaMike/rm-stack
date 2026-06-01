@@ -14,7 +14,7 @@ class DocumentValidator {
     /** Completeness percentage for a chapter (0-100). */
     chapterCompleteness(chapter) {
         if (!chapter) return 0;
-        const state = this.doc.checklistState[chapter.id] || {};
+        const state = this.doc.checklistBucket(this.doc.discipline, chapter.id);
         const total = (chapter.checklist || []).length;
         if (total === 0) return 100;
         const done = chapter.checklist.filter(c => state[c.id]).length;
@@ -53,7 +53,7 @@ class DocumentValidator {
      *  The outline is the same partition the editor and exporter use, so
      *  the count matches exactly what the user can see and edit in that
      *  discipline's view. Chapters shared between disciplines (e.g.
-     *  ch04_fsc in Item and System, ch10_hw in System and Hardware)
+     *  ch09_hsi in System/HW/SW, ch13_calibration in System/SW)
      *  count toward every discipline that surfaces them — consistent
      *  with the one-JSON-four-views rule: the budget is a view too. */
     disciplineBudgetStatus(disciplineId) {
@@ -102,6 +102,11 @@ class DocumentValidator {
         // signal X ..." where the subject is the interface itself.
         const declaredInterfaceNames = new Set(
             (this.doc.interfaces || []).map(i => i.name).filter(Boolean));
+        // Declared Safety Actors are legitimate FSR subjects in the FSC:
+        // an FSR allocated to "the driver" or "the ESC system" is not an
+        // orphan. "the system" is always implicitly valid (handled below).
+        const declaredActorNames = new Set(
+            (this.doc.safetyActors || []).map(a => a.name).filter(Boolean));
         const declaredFunctions    = new Set(this.doc.itemFunctions.map(f => f.id));
         const declaredSGs          = new Set(this.doc.safetyGoals.map(g => g.id));
         const declaredModes        = new Set(this.doc.modes.map(m => m.id));
@@ -119,8 +124,9 @@ class DocumentValidator {
                 req.subject !== 'the system' &&
                 req.subject !== 'the HSI' &&
                 !declaredElementNames.has(req.subject) &&
-                !declaredInterfaceNames.has(req.subject)) {
-                push(req, `Subject "${req.subject}" not a declared element or interface`);
+                !declaredInterfaceNames.has(req.subject) &&
+                !declaredActorNames.has(req.subject)) {
+                push(req, `Subject "${req.subject}" not a declared element, interface, or safety actor`);
             }
             // parentSG if present must resolve
             if (req.parentSG && !declaredSGs.has(req.parentSG)) {
@@ -439,6 +445,167 @@ class DocumentValidator {
                     }
                 });
             });
+        });
+        return issues;
+    }
+
+    /**
+     * Timing-chain check. Each TimingChain decomposes one ModeTransition
+     * into ordered hops with per-hop time budgets. The Σ of those budgets
+     * must fit the transition's own time budget (transitionTime); where
+     * the transition has none, fall back to the FTTI of the Safety Goal
+     * governing the target safe state. Returns one result per chain:
+     *   { chainId, name, status, budgetMs, budgetSource, sumMs,
+     *     missingBudgets, dangling }
+     * status:
+     *   'no-transition' chain not anchored to a transition
+     *   'no-budget'     transition has no transitionTime and no FTTI to use
+     *   'incomplete'    one or more hop budgets missing/unparseable
+     *   'over'          Σ of hop budgets exceeds the budget
+     *   'ok'            fully specified and within budget
+     */
+    timingChainCheck() {
+        const chains = this.doc.timingChains || [];
+        const modes = this.doc.modes || [];
+        const safeStates = this.doc.safeStates || [];
+        const sgs = this.doc.safetyGoals || [];
+        const resolveBudget = (tr) => {
+            // Prefer the transition's own time budget.
+            const tt = Timing.parseMs(tr.transitionTime);
+            if (tt != null && !isNaN(tt)) return { ms: tt, src: 'transition time' };
+            // Else the FTTI of the SG governing the target safe state.
+            const toMode = modes.find(m => m.id === tr.toMode);
+            if (toMode) {
+                const ss = safeStates.find(s => (s.modeRefs || []).includes(toMode.id));
+                if (ss) {
+                    for (const sgId of (ss.sgRefs || [])) {
+                        const sg = sgs.find(g => g.id === sgId);
+                        const f = sg ? Timing.parseMs(sg.ftti) : null;
+                        if (f != null && !isNaN(f)) return { ms: f, src: 'FTTI' };
+                    }
+                }
+            }
+            return { ms: null, src: null };
+        };
+        return chains.map(ch => {
+            const tr = (this.doc.modeTransitions || []).find(t => t.id === ch.modeTransitionId);
+            let sumMs = 0, missingBudgets = 0, dangling = 0;
+            (ch.segments || []).forEach(seg => {
+                const found =
+                    (seg.kind === 'element'    && (this.doc.elements   || []).some(e => e.id === seg.refId)) ||
+                    (seg.kind === 'externalIf' && (this.doc.hsiSignals  || []).some(s => s.id === seg.refId)) ||
+                    (seg.kind === 'internalIf' && (this.doc.interfaces  || []).some(i => i.id === seg.refId));
+                if (!found) dangling++;
+                const b = Timing.parseMs(seg.budget);
+                if (b == null || isNaN(b)) missingBudgets++;
+                else sumMs += b;
+            });
+            const budget = tr ? resolveBudget(tr) : { ms: null, src: null };
+            let status;
+            if (!tr)                                    status = 'no-transition';
+            else if (budget.ms == null)                 status = 'no-budget';
+            else if (missingBudgets > 0)                status = 'incomplete';
+            else if (sumMs > budget.ms)                 status = 'over';
+            else                                        status = 'ok';
+            return {
+                chainId: ch.id, name: ch.name || ch.id, status,
+                budgetMs: budget.ms, budgetSource: budget.src,
+                sumMs, missingBudgets, dangling
+            };
+        });
+    }
+
+    /**
+     * Safe-state reaction timing check. A safe-state REACTION is a
+     * transition FROM a non-safe (operational / hazardous) state INTO a
+     * safe state — the fault reaction whose detect-and-react path must
+     * complete within FTTI. A transition between two safe states is not a
+     * reaction and is intentionally excluded (it has nothing to detect),
+     * so it never raises a spurious "no detecting element" warning.
+     * "Safe" is DERIVED from the mode (Mode.isSafeState, or a SafeState
+     * that references the mode) — not a separate checkbox.
+     */
+    safeStateTransitionCheck() {
+        const issues = [];
+        const modes = this.doc.modes || [];
+        const safeStates = this.doc.safeStates || [];
+        const sgs = this.doc.safetyGoals || [];
+        const isSafe = (m) => !!(m && (m.isSafeState || safeStates.some(s => (s.modeRefs || []).includes(m.id))));
+        const reaches = (t) => {
+            const toMode = modes.find(m => m.id === t.toMode);
+            const fromMode = modes.find(m => m.id === t.fromMode);
+            if (!toMode) return false;
+            return isSafe(toMode) && !isSafe(fromMode);
+        };
+        (this.doc.modeTransitions || [])
+            .filter(reaches)
+            .forEach(t => {
+                const toMode = modes.find(m => m.id === t.toMode);
+                const ss = safeStates.find(s => (s.modeRefs || []).includes(t.toMode));
+                const ssLabel = ss ? (ss.description || ss.id)
+                                   : (toMode ? (toMode.name || toMode.id) : t.toMode);
+                let fttiMs = null;
+                if (ss) {
+                    const ms = sgs
+                        .filter(sg => (sg.safeStates || []).includes(ss.id) || (ss.sgRefs || []).includes(sg.id))
+                        .map(sg => Timing.parseMs(sg.ftti))
+                        .filter(v => typeof v === 'number' && !isNaN(v));
+                    if (ms.length) fttiMs = Math.min.apply(null, ms);
+                }
+                const ttMs = Timing.parseMs(t.transitionTime);
+                if (fttiMs == null) {
+                    issues.push({ kind: 'no-ftti', tId: t.id,
+                        text: `Safe-state transition ${t.id} (→ ${ssLabel}) has no governing FTTI — link the target safe state to a Safety Goal with an FTTI to time-check it.` });
+                } else if (ttMs == null) {
+                    issues.push({ kind: 'ttime-missing', tId: t.id,
+                        text: `Safe-state transition ${t.id} has no transition time; FTTI ${Timing.formatMs(fttiMs)} cannot be checked.` });
+                } else if (isNaN(ttMs)) {
+                    issues.push({ kind: 'ttime-unparseable', tId: t.id,
+                        text: `Safe-state transition ${t.id}: time "${t.transitionTime}" is not a parseable duration.` });
+                } else if (ttMs > fttiMs) {
+                    issues.push({ kind: 'ttime-over-ftti', tId: t.id,
+                        text: `Safe-state transition ${t.id} takes ${Timing.formatMs(ttMs)} but the governing FTTI for "${ssLabel}" is ${Timing.formatMs(fttiMs)}.` });
+                }
+            });
+        return issues;
+    }
+
+    /**
+     * Hazardous states without a safe-state reaction. A non-safe
+     * (operational / hazardous) mode from which NO transition path reaches
+     * any safe state is a trap — the system can enter it but can never be
+     * driven to a safe state. This is the warning about the ACTUAL
+     * dangerous states (as opposed to flagging transitions between two safe
+     * states). Reachability is multi-hop, so an operational → degraded →
+     * safe path is correctly accepted.
+     */
+    hazardousStatesWithoutSafeReaction() {
+        const modes = this.doc.modes || [];
+        const trans = this.doc.modeTransitions || [];
+        const safeStates = this.doc.safeStates || [];
+        const isSafe = (m) => !!(m && (m.isSafeState || safeStates.some(s => (s.modeRefs || []).includes(m.id))));
+        const adj = new Map();
+        modes.forEach(m => adj.set(m.id, []));
+        trans.forEach(t => { if (adj.has(t.fromMode)) adj.get(t.fromMode).push(t.toMode); });
+        const reachesSafe = (start) => {
+            const seen = new Set([start]);
+            const queue = [start];
+            while (queue.length) {
+                const cur = queue.shift();
+                for (const nxt of (adj.get(cur) || [])) {
+                    const nm = modes.find(m => m.id === nxt);
+                    if (nm && isSafe(nm)) return true;
+                    if (!seen.has(nxt)) { seen.add(nxt); queue.push(nxt); }
+                }
+            }
+            return false;
+        };
+        const issues = [];
+        modes.filter(m => !isSafe(m)).forEach(m => {
+            if (!reachesSafe(m.id)) {
+                issues.push({ kind: 'no-safe-reaction', modeId: m.id,
+                    text: `Hazardous mode "${m.name || m.id}" has no transition path into any safe state — no safe-state reaction is defined for it.` });
+            }
         });
         return issues;
     }

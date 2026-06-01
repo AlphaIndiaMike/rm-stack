@@ -20,8 +20,6 @@ Chapters.register('item', {
     subjectMode: 'none',
     declarations: ['itemFunction', 'mode', 'assumption'],
     checklist: [
-        { id: 'i2a', text: 'Item functions enumerated with stable IDs.' },
-        { id: 'i2b', text: 'Operating modes enumerated with stable IDs.' },
         { id: 'i2c', text: 'Boundary defined as enumerated interfaces (cross-ref System Ch. 5).',
           help: 'External Interfaces table is owned by the System discipline.' },
         { id: 'i2d', text: 'Environmental envelope quantified (numbers with units).' },

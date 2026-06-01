@@ -39,7 +39,7 @@ const WelcomePanel = {
                     <div class="welcome-step-body">
                         <strong>Open an existing project</strong>
                         <p>Load a previously saved project file to pick up where you left off.</p>
-                        <button id="welcomeLoadBtn" class="btn btn-sm btn-primary">Load Project…</button>
+                        <button id="welcomeLoadBtn" class="btn-welcome-load">Load Project…</button>
                     </div>
                 </div>
 

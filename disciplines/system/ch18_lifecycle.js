@@ -7,7 +7,7 @@
 
 Chapters.register('system', {
     id: 'ch18_lifecycle',
-    number: '15',
+    number: '14',
     title: 'Production, Operation, Service, Decommissioning',
     order: 190,
     intro: 'Field behavior constraints from Part 7.',

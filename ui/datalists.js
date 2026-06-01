@@ -10,6 +10,7 @@
  *   lex-producers    : interface Node A (declared elements + lexicon)
  *   lex-consumers    : interface Node B
  *   lex-triggers     : mode-transition triggers
+ *   lex-interfaces   : interface names (internal-mapping autocomplete)
  *
  * The element is inserted into the chapter root once per render. Inputs
  * reference it by `list="owners-datalist"` etc. Refresh on every
@@ -63,6 +64,13 @@ const Datalists = {
             ...((doc.lexicon && doc.lexicon.triggers) || [])
         ];
         wrap.appendChild(mkList('lex-triggers', triggers));
+
+        const interfaceNames = [
+            ...((doc.interfaces || []).map(i => i.name).filter(Boolean)),
+            ...((doc.interfaces || []).map(i => i.interfaceTo).filter(Boolean)),
+            ...((doc.lexicon && doc.lexicon.interfaces) || [])
+        ];
+        wrap.appendChild(mkList('lex-interfaces', interfaceNames));
 
         return wrap;
     }

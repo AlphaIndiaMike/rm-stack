@@ -38,7 +38,7 @@ class TraceabilityReport {
                     <td title="${s.fsrCount} FSR(s) trace to this SG">${s.hasFsr ? `✓ ${s.fsrCount}` : '✗'}</td>
                     <td title="${s.acceptanceCount} acceptance req(s) trace through FSR(s)">${s.hasAcceptance ? `✓ ${s.acceptanceCount}` : '✗'}</td>
                     <td title="${s.elementCount} element req(s) trace through acceptance">${s.hasElement ? `✓ ${s.elementCount}` : '✗'}</td>
-                    <td>${s.complete ? '<span style="color:#198754;">✓ complete</span>' : '<span style="color:#dc3545;">✗ gap</span>'}</td>
+                    <td>${s.complete ? '<span style="color:var(--green);">✓ complete</span>' : '<span style="color:var(--red);">✗ gap</span>'}</td>
                 </tr>`;
             });
             html += '</tbody></table>';
@@ -79,7 +79,7 @@ class TraceabilityReport {
 
 Chapters.register('system', {
     id: 'ch20_trace',
-    number: '6',
+    number: '16',
     title: 'Traceability',
     order: 210,
     intro: 'Trace matrix, orphan report, coverage reports.',

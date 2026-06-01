@@ -57,8 +57,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // etc.). The chapter selection is cleared because chapter ids
         // may differ between disciplines.
         doc.discipline = e.target.value;
-        editorView.currentChapter = null;
-        editorView.currentElement = null;
+        selectDefaultChapterOrWelcome(false);
+        recordContext(editorView.currentChapter ? editorView.currentChapter.id : null,
+                      editorView.currentElement ? editorView.currentElement.id : null);
         renderAll();
     });
 
@@ -71,24 +72,34 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('saveJsonButton').addEventListener('click', () => {
-        Persistence.save(doc);
+        Persistence.save(doc, () => refreshProjectNamePill());
     });
 
-    const loadInput = document.getElementById('loadJsonInput');
-    document.getElementById('loadJsonButton').addEventListener('click', () => loadInput.click());
+    const loadInput = document.getElementById('loadJsonInput');    document.getElementById('loadJsonButton').addEventListener('click', () => loadInput.click());
     loadInput.addEventListener('change', async e => {
         const file = e.target.files[0];
         if (!file) return;
         try {
             const loaded = await Persistence.load(file);
+            // Preserve the discipline the user is currently viewing unless
+            // the file carries a saved context that names one. A file with
+            // no UI-context info must NOT yank the user to a default
+            // discipline — keep them where they are and land on that
+            // discipline's first input-bearing chapter.
+            const currentDiscipline = doc ? doc.discipline : 'system';
             doc = loaded;
+            if (doc.lastContext && doc.lastContext.discipline) {
+                doc.discipline = doc.lastContext.discipline;
+            } else {
+                doc.discipline = currentDiscipline;
+            }
             outlineView.setDocument(doc);
             editorView.setDocument(doc);
             summaryView.setDocument(doc);
             document.getElementById('docClassSelect').value = doc.docClass;
             document.getElementById('disciplineSelect').value = doc.discipline;
-            editorView.currentChapter = null;
-            editorView.currentElement = null;
+            refreshProjectNamePill();
+            selectDefaultChapterOrWelcome(true);
             renderAll();
         } catch (err) {
             alert('Failed to load file: ' + err.message);
@@ -96,18 +107,184 @@ document.addEventListener('DOMContentLoaded', () => {
         loadInput.value = '';
     });
 
+    // --- Pane collapse toggles ---
+    // Above 959px: both panes are always visible in the grid; toggle
+    // buttons are hidden by CSS and clicks are no-ops.
+    // Below 960px / portrait: panes become fixed off-canvas drawers.
+    // A backdrop is injected so tapping outside closes the drawer.
+    const paneWrap = document.querySelector('.three-pane-container');
+
+    // Inject a single shared backdrop element
+    const backdrop = document.createElement('div');
+    backdrop.className = 'pane-backdrop';
+    paneWrap.appendChild(backdrop);
+
+    const narrowMq = window.matchMedia(
+        '(max-width: 959px), (max-aspect-ratio: 3/4)');
+    let leftVisible  = false;
+    let rightVisible = false;
+
+    function applyPaneClasses() {
+        const narrow = narrowMq.matches;
+        paneWrap.classList.toggle('show-left',  narrow && leftVisible);
+        paneWrap.classList.toggle('show-right', narrow && rightVisible);
+        document.getElementById('toggleLeftPane')
+            .classList.toggle('active', narrow && leftVisible);
+        document.getElementById('toggleRightPane')
+            .classList.toggle('active', narrow && rightVisible);
+    }
+
+    function closeAll() {
+        leftVisible  = false;
+        rightVisible = false;
+        applyPaneClasses();
+    }
+
+    document.getElementById('toggleLeftPane').addEventListener('click', () => {
+        if (!narrowMq.matches) return;        // no-op on wide screens
+        leftVisible  = !leftVisible;
+        rightVisible = false;                 // only one drawer at a time
+        applyPaneClasses();
+    });
+    document.getElementById('toggleRightPane').addEventListener('click', () => {
+        if (!narrowMq.matches) return;
+        rightVisible = !rightVisible;
+        leftVisible  = false;
+        applyPaneClasses();
+    });
+
+    // Backdrop tap closes whichever drawer is open
+    backdrop.addEventListener('click', closeAll);
+
+    // Crossing the breakpoint (resize / rotate) resets to defaults
+    const onRegimeChange = () => { closeAll(); };
+    if (narrowMq.addEventListener) narrowMq.addEventListener('change', onRegimeChange);
+    else if (narrowMq.addListener) narrowMq.addListener(onRegimeChange);
+    applyPaneClasses();
+
     // --- Initial render ---
+    refreshProjectNamePill();
+    selectDefaultChapterOrWelcome(true);
     renderAll();
 });
+
+/**
+ * Update the header project-name pill from the current document. Shows
+ * the name when set; shows a muted "untitled" when unnamed.
+ */
+function refreshProjectNamePill() {
+    const pill = document.getElementById('projectNamePill');
+    if (!pill) return;
+    const name = (doc && doc.projectName || '').trim();
+    if (name) {
+        pill.textContent = name;
+        pill.classList.remove('unnamed');
+        pill.title = 'Project name';
+    } else {
+        pill.textContent = 'untitled';
+        pill.classList.add('unnamed');
+        pill.title = 'Project name — set when you save';
+    }
+}
 
 function onChapterSelected(chapterId, elementId) {
     editorView.load(chapterId, elementId);
     outlineView.setActive(chapterId, elementId);
+    recordContext(chapterId, elementId);
     renderAll();
 }
 
 function onModelChanged() {
     renderAll();
+}
+
+/**
+ * Snapshot the current editing context onto the document so it persists
+ * with the project file and can be restored on the next load. Called on
+ * every chapter/element/discipline change.
+ */
+function recordContext(chapterId, elementId) {
+    if (!doc) return;
+    doc.lastContext = {
+        discipline: doc.discipline,
+        chapterId: chapterId || null,
+        elementId: elementId || null
+    };
+}
+
+/**
+ * First chapter in a discipline's outline where the user actually does
+ * input — one that has requirement authoring (allowsRequirements),
+ * declaration tables (declarations), or per-element expansion
+ * (autoExpand). This skips pure front-matter / scope / governance-only
+ * chapters, landing on e.g. Item Definition for Item (declarations)
+ * rather than the Functional Safety Concept (first allowsRequirements)
+ * or the front-matter checklist. Falls back to outline[0] if nothing
+ * qualifies.
+ */
+function firstEditableChapter(disciplineId) {
+    const outline = Chapters.outline(disciplineId) || [];
+    return outline.find(c =>
+        c.allowsRequirements ||
+        (c.declarations && c.declarations.length) ||
+        c.autoExpand
+    ) || outline[0] || null;
+}
+
+/**
+ * Decide what the centre pane shows when the context changes (startup,
+ * discipline switch, project load):
+ *   - empty document   → no chapter selected → WelcomePanel shows.
+ *   - has data + valid saved lastContext → restore it (the chapter, and
+ *                        the element if it still exists).
+ *   - has data, no/invalid saved context → first EDITABLE chapter
+ *                        (allowsRequirements), not front-matter/checklist.
+ *
+ * Minimum-viable back-compat: a file with no lastContext (older save)
+ * simply lands on the first editable chapter.
+ *
+ * `useSavedContext` is true on project load/boot (restore), false on a
+ * manual discipline switch (the saved context belongs to another
+ * discipline, so we pick that discipline's first editable chapter).
+ */
+function selectDefaultChapterOrWelcome(useSavedContext) {
+    if (WelcomePanel.isDocumentEmpty(doc)) {
+        editorView.currentChapter = null;
+        editorView.currentElement = null;
+        outlineView.setActive(null, null);
+        return;
+    }
+
+    const outline = Chapters.outline(doc.discipline) || [];
+
+    // Try to restore a saved context that belongs to the active discipline.
+    if (useSavedContext && doc.lastContext &&
+        doc.lastContext.discipline === doc.discipline &&
+        doc.lastContext.chapterId) {
+        const ctx = doc.lastContext;
+        const chapterExists = outline.some(c => c.id === ctx.chapterId);
+        if (chapterExists) {
+            // Validate the element still exists if one was recorded.
+            let elementId = ctx.elementId;
+            if (elementId && !(doc.elements || []).some(e => e.id === elementId)) {
+                elementId = null;
+            }
+            editorView.load(ctx.chapterId, elementId);
+            outlineView.setActive(ctx.chapterId, elementId);
+            return;
+        }
+    }
+
+    // Fall back: first chapter the user can actually edit.
+    const target = firstEditableChapter(doc.discipline);
+    if (target) {
+        editorView.load(target.id, null);
+        outlineView.setActive(target.id, null);
+        recordContext(target.id, null);
+    } else {
+        editorView.currentChapter = null;
+        editorView.currentElement = null;
+    }
 }
 
 function renderAll() {
@@ -124,15 +301,15 @@ function renderAll() {
     const inEditor = !!editorView.currentChapter;
     const actions = document.getElementById('topBarActions');
     const header  = document.getElementById('chapterPaneHeader');
-    if (actions) actions.classList.toggle('d-none', !inEditor);
-    if (header)  header.classList.toggle('d-none', !inEditor);
+    if (actions) actions.classList.toggle('hidden', !inEditor);
+    if (header)  header.classList.toggle('d-none', !inEditor); // Bootstrap d-none still loaded via CDN — OK
 
     // Update budget counter in top bar
     const validator = new DocumentValidator(doc);
     const s = validator.budgetStatus();
     const counter = document.getElementById('budgetCounter');
     counter.textContent = `${s.count} / ${s.max}`;
-    counter.className = 'badge ' + (s.overBudget ? 'bg-danger' : s.percent > 80 ? 'bg-warning text-dark' : 'bg-secondary');
+    counter.className = s.overBudget ? 'budget-badge over' : s.percent > 80 ? 'budget-badge warn' : 'budget-badge ok';
     const ds = validator.disciplineBudgetStatus(doc.discipline);
     const discLabel = (Disciplines.get(doc.discipline) || {}).label || doc.discipline;
     counter.title = `Total committed requirements (${s.count}) vs the document-class ceiling (${s.max}). Going over budget is the cue to split into HW-RS / SW-RS documents.\n\nActive discipline — ${discLabel}: ${ds.count} / ${ds.max}. Per-discipline breakdown is in the right-pane Requirement Budget panel.`;

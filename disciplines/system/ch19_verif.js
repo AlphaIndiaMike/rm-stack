@@ -8,7 +8,7 @@
 
 Chapters.register('system', {
     id: 'ch19_verif',
-    number: '5',
+    number: '15',
     title: 'Verification Strategy',
     order: 200,
     intro: 'Default verification method per requirement class.',
