@@ -174,7 +174,7 @@ class Exporter {
         const out = [];
         const stamp = new Date().toISOString().substring(0, 10);
         const outline = Chapters.outline(doc.discipline) || [];
-        const title = doc.title || 'System Requirements Specification';
+        const title = docTitle(doc);
 
         out.push(`# ${title}`);
         out.push(`Discipline: ${doc.discipline}  |  Generated: ${stamp}`);
@@ -227,7 +227,7 @@ class Exporter {
 
         // --- Header ---
         out.push('═'.repeat(72));
-        out.push('  ' + (doc.title || 'System Requirements Specification').toUpperCase());
+        out.push('  ' + docTitle(doc).toUpperCase());
         out.push('');
         out.push(`  Discipline:  ${doc.discipline}`);
         out.push(`  Class:       ${classLabel}`);
@@ -342,7 +342,7 @@ class Exporter {
         const stamp = new Date().toISOString().substring(0, 10);
         const classLabel = (CLASS_BUDGETS[doc.docClass] || {}).label || doc.docClass;
         const outline = Chapters.outline(doc.discipline) || [];
-        const title = doc.title || 'System Requirements Specification';
+        const title = docTitle(doc);
 
         const body = [];
 
@@ -442,6 +442,15 @@ ${body.join('\n')}
 
 
 // ===== Helpers used by the HTML builder =====
+
+// Document title for a discipline view: an explicit project title wins,
+// else the discipline's own document title (System/Hardware/Software
+// Requirements Specification, Item Definition & FSC), else a generic one.
+function docTitle(doc) {
+    if (doc.title) return doc.title;
+    const d = (typeof Disciplines !== 'undefined') ? Disciplines.get(doc.discipline) : null;
+    return (d && d.docTitle) || 'Requirements Specification';
+}
 
 function esc(s) {
     return String(s == null ? '' : s)

@@ -253,6 +253,31 @@ class DocumentValidator {
         });
     }
 
+    /** Does this element trace up to a declared Safety Goal through the
+     *  requirement chain the data model is built on?
+     *    TSR.parentAcceptanceReqs -> acceptance.parentFsrs -> FSR.parentSG
+     *  A legacy direct parentSG on the TSR or the acceptance req also counts.
+     *  This is the chain the Traceability matrix walks; the Element Coverage
+     *  Diagnostic uses it so a complete chain clears the flag — and there is
+     *  no phantom "no parent SG" the user cannot fix (a TSR has, by design,
+     *  no direct parent-SG field). */
+    elementTracesToSG(elementId) {
+        const reqById = new Map(this.doc.requirements.map(r => [r.id, r]));
+        const declaredSGs = new Set(this.doc.safetyGoals.map(g => g.id));
+        const accTracesToSG = (acc) => {
+            if (!acc) return false;
+            if (acc.parentSG && declaredSGs.has(acc.parentSG)) return true; // legacy acc→SG
+            return (acc.parentFsrs || []).some(fsrId => {
+                const fsr = reqById.get(fsrId);
+                return fsr && fsr.parentSG && declaredSGs.has(fsr.parentSG);
+            });
+        };
+        return this.doc.requirementsForElement(elementId).some(r => {
+            if (r.parentSG && declaredSGs.has(r.parentSG)) return true; // legacy TSR→SG
+            return (r.parentAcceptanceReqs || []).some(accId => accTracesToSG(reqById.get(accId)));
+        });
+    }
+
     /** Requirements with validation errors/warnings. Skips requirements
      *  whose chapter is not in the active discipline's outline — those
      *  are either cross-discipline rows (one-JSON, many-views) or rows
@@ -404,49 +429,52 @@ class DocumentValidator {
     }
 
     /**
-     * Timing crosscheck. Every transition INTO a mode that realizes a
-     * safe state must complete within the FTTI of any Safety Goal that
-     * references that safe state. Returns a list of issues where the
-     * transition time exceeds the SG's FTTI (or where one side is
-     * unparseable, which is a less severe warning).
+     * Timing crosscheck. Every transition that has a governing FTTI must
+     * complete within it. A transition obtains a governing FTTI in one of
+     * two ways (see governingFttiForTransition):
+     *   - its explicit Safety Goal link (author's direct choice), or
+     *   - the Safety Goal(s) guarding the safe state its target realises
+     *     (tightest FTTI wins; legacy SG.safeStates link still honoured).
+     * Transitions with neither are skipped — there is nothing to check.
      *
      * Both transitionTime and ftti are run through Timing.parseMs so
      * "1 s" / "1000 ms" / "1000" all compare correctly.
      */
     timingCrosscheck() {
         const issues = [];
-        const safeStates = this.doc.safeStates || [];
-        const sgs        = this.doc.safetyGoals || [];
-        const trans      = this.doc.modeTransitions || [];
+        const trans = this.doc.modeTransitions || [];
 
-        safeStates.forEach(ss => {
-            const guardingSGs = sgs.filter(sg =>
-                (sg.safeStates || []).includes(ss.id) ||
-                (ss.sgRefs || []).includes(sg.id)
-            );
-            if (guardingSGs.length === 0) return;
-            const tightestFttiMs = guardingSGs
-                .map(sg => Timing.parseMs(sg.ftti))
-                .filter(v => typeof v === 'number' && !isNaN(v))
-                .reduce((a, b) => Math.min(a, b), Infinity);
-            if (!isFinite(tightestFttiMs)) return;
-            (ss.modeRefs || []).forEach(modeId => {
-                trans.filter(t => t.toMode === modeId).forEach(t => {
-                    const ttMs = Timing.parseMs(t.transitionTime);
-                    if (ttMs == null) {
-                        issues.push({ kind: 'ttime-missing', tId: t.id,
-                            text: `Transition ${t.id} into safe-state mode has no transition time; FTTI ${Timing.formatMs(tightestFttiMs)} cannot be checked.` });
-                    } else if (isNaN(ttMs)) {
-                        issues.push({ kind: 'ttime-unparseable', tId: t.id,
-                            text: `Transition ${t.id}: time "${t.transitionTime}" not parseable as a duration.` });
-                    } else if (ttMs > tightestFttiMs) {
-                        issues.push({ kind: 'ttime-over-ftti', tId: t.id,
-                            text: `Transition ${t.id} takes ${Timing.formatMs(ttMs)} but FTTI for safe state "${ss.description || ss.id}" is ${Timing.formatMs(tightestFttiMs)}.` });
-                    }
-                });
-            });
+        trans.forEach(t => {
+            const gov = governingFttiForTransition(this.doc, t);
+            if (gov.ms === null) return;                          // no governing FTTI: nothing to check
+            const where = gov.source === 'link'
+                ? `linked Safety Goal "${gov.sg.name || gov.sg.id}"`
+                : `safe state "${this._safeStateLabelForTransition(t)}"`;
+            if (isNaN(gov.ms)) {                                  // goal chosen but its FTTI is unparseable
+                issues.push({ kind: 'ftti-unparseable', tId: t.id,
+                    text: `Transition ${t.id}: governing FTTI "${gov.text}" is not a parseable duration.` });
+                return;
+            }
+            const ttMs = Timing.parseMs(t.transitionTime);
+            if (ttMs == null) {
+                issues.push({ kind: 'ttime-missing', tId: t.id,
+                    text: `Transition ${t.id} has a governing FTTI (${Timing.formatMs(gov.ms)}, from ${where}) but no transition time; it cannot be checked.` });
+            } else if (isNaN(ttMs)) {
+                issues.push({ kind: 'ttime-unparseable', tId: t.id,
+                    text: `Transition ${t.id}: time "${t.transitionTime}" not parseable as a duration.` });
+            } else if (ttMs > gov.ms) {
+                issues.push({ kind: 'ttime-over-ftti', tId: t.id,
+                    text: `Transition ${t.id} takes ${Timing.formatMs(ttMs)} but its governing FTTI (from ${where}) is ${Timing.formatMs(gov.ms)}.` });
+            }
         });
         return issues;
+    }
+
+    /** Best label for the safe state a transition's target realises (for
+     *  diagnostic text only). */
+    _safeStateLabelForTransition(t) {
+        const ss = (this.doc.safeStates || []).find(s => (s.modeRefs || []).includes(t.toMode));
+        return ss ? (ss.description || ss.id) : '';
     }
 
     /**
@@ -473,18 +501,10 @@ class DocumentValidator {
             // Prefer the transition's own time budget.
             const tt = Timing.parseMs(tr.transitionTime);
             if (tt != null && !isNaN(tt)) return { ms: tt, src: 'transition time' };
-            // Else the FTTI of the SG governing the target safe state.
-            const toMode = modes.find(m => m.id === tr.toMode);
-            if (toMode) {
-                const ss = safeStates.find(s => (s.modeRefs || []).includes(toMode.id));
-                if (ss) {
-                    for (const sgId of (ss.sgRefs || [])) {
-                        const sg = sgs.find(g => g.id === sgId);
-                        const f = sg ? Timing.parseMs(sg.ftti) : null;
-                        if (f != null && !isNaN(f)) return { ms: f, src: 'FTTI' };
-                    }
-                }
-            }
+            // Else the governing FTTI: the transition's explicit Safety Goal
+            // link if set, otherwise the goal guarding the target safe state.
+            const gov = governingFttiForTransition(this.doc, tr);
+            if (gov.ms != null && !isNaN(gov.ms)) return { ms: gov.ms, src: 'FTTI' };
             return { ms: null, src: null };
         };
         return chains.map(ch => {
@@ -545,7 +565,15 @@ class DocumentValidator {
                 const ssLabel = ss ? (ss.description || ss.id)
                                    : (toMode ? (toMode.name || toMode.id) : t.toMode);
                 let fttiMs = null;
-                if (ss) {
+                // Explicit transition→Safety Goal link wins (author's direct
+                // choice); otherwise fall back to the tightest FTTI among the
+                // goals guarding the realised safe state.
+                if (t.safetyGoalRef) {
+                    const linked = sgs.find(sg => sg.id === t.safetyGoalRef);
+                    const ms = linked ? Timing.parseMs(linked.ftti) : null;
+                    if (typeof ms === 'number' && !isNaN(ms)) fttiMs = ms;
+                }
+                if (fttiMs == null && ss) {
                     const ms = sgs
                         .filter(sg => (sg.safeStates || []).includes(ss.id) || (ss.sgRefs || []).includes(sg.id))
                         .map(sg => Timing.parseMs(sg.ftti))

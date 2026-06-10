@@ -22,5 +22,6 @@ Disciplines.register({
     shortLabel: 'Item',
     order: 1,
     enabled: true,
+    docTitle: 'Item Definition & Functional Safety Concept',
     description: 'Item-level definition + HARA + Functional Safety Concept per ISO 26262-3. Foundation for the System / HW / SW work products.'
 });

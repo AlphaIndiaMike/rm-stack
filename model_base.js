@@ -400,6 +400,14 @@ class ModeTransition {
         this.trigger        = data.trigger || '';
         this.guard          = data.guard || '';
         this.transitionTime = data.transitionTime || '';
+        // Optional explicit link to the Safety Goal whose FTTI governs this
+        // transition's time budget. This is the author's direct answer to
+        // "which FTTI applies here?", independent of whether the target is a
+        // safe state. When set it WINS over the safe-state-derived FTTI (see
+        // governingFttiForTransition). Linking a goal does NOT make the target
+        // mode a safe state — safe-state status stays derived from the mode
+        // (Mode.isSafeState / SafeState.modeRefs). '' = derive as before.
+        this.safetyGoalRef  = data.safetyGoalRef || '';
         // Author marks a transition as the fault reaction into a safe
         // state (System Breakdown "Safe state?" checkbox). The Timing
         // Analysis safe-state reaction tool lists these automatically.
@@ -421,6 +429,53 @@ class ModeTransition {
     }
     static generateId() { return provisionalId('TR'); }
     toJSON() { return Object.assign({}, this); }
+}
+
+
+/**
+ * The Safety Goal whose FTTI governs a transition's time budget.
+ *
+ * Precedence:
+ *   1. The transition's explicit safetyGoalRef, when it resolves. This is
+ *      the author's direct choice and always wins — it lets a transition
+ *      carry an FTTI WITHOUT pretending its target is a safe state, which
+ *      was the only way to obtain an FTTI before.
+ *   2. Fallback (unchanged behaviour): the Safety Goal(s) guarding the safe
+ *      state the target mode realises. When several guard it, the TIGHTEST
+ *      (smallest) FTTI wins — the conservative choice the timing checks have
+ *      always made. Honours both link directions (SafeState.sgRefs and the
+ *      legacy SafetyGoal.safeStates).
+ *
+ * Returns { ms, text, sg, source } where source is 'link' | 'safe-state',
+ * or { ms: null, source: null } when no FTTI governs the transition. `ms`
+ * is NaN when the chosen FTTI text is present but unparseable, so callers
+ * can tell "no governing goal" apart from "goal with a bad FTTI value".
+ */
+function governingFttiForTransition(doc, tr) {
+    if (!tr) return { ms: null, source: null };
+    // 1. Explicit link wins.
+    if (tr.safetyGoalRef) {
+        const sg = (doc.safetyGoals || []).find(g => g.id === tr.safetyGoalRef);
+        if (sg) {
+            const ms = Timing.parseMs(sg.ftti);
+            return { ms, text: sg.ftti, sg, source: 'link' };
+        }
+    }
+    // 2. Fallback: tightest FTTI among the goals guarding the target safe state.
+    const toMode = (doc.modes || []).find(m => m.id === tr.toMode);
+    if (!toMode) return { ms: null, source: null };
+    const guarded = (doc.safeStates || []).filter(s => (s.modeRefs || []).includes(toMode.id));
+    let bestMs = Infinity, bestSg = null;
+    guarded.forEach(ss => {
+        (doc.safetyGoals || [])
+            .filter(sg => (sg.safeStates || []).includes(ss.id) || (ss.sgRefs || []).includes(sg.id))
+            .forEach(sg => {
+                const ms = Timing.parseMs(sg.ftti);
+                if (typeof ms === 'number' && !isNaN(ms) && ms < bestMs) { bestMs = ms; bestSg = sg; }
+            });
+    });
+    if (isFinite(bestMs)) return { ms: bestMs, text: bestSg.ftti, sg: bestSg, source: 'safe-state' };
+    return { ms: null, source: null };
 }
 
 

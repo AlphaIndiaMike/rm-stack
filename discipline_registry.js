@@ -27,7 +27,11 @@ const Disciplines = (() => {
                 shortLabel: spec.shortLabel || spec.label || spec.id,
                 order: spec.order != null ? spec.order : 99,
                 enabled: spec.enabled !== false,
-                description: spec.description || ''
+                description: spec.description || '',
+                // Full document title for exports (e.g. "Hardware Requirements
+                // Specification"). Falls back to "<label> Requirements
+                // Specification" so every discipline has a sensible title.
+                docTitle: spec.docTitle || `${spec.label || spec.id} Requirements Specification`
             };
         },
 

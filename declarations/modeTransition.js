@@ -20,11 +20,12 @@ Declarations.register('modeTransition', {
         'To':      'Target mode the transition ends in.',
         'Trigger': 'Event or condition that causes the transition to fire.',
         'Guard':   'Optional precondition that must be true for the trigger to take effect.',
-        'Time':    'Time budget for the transition to complete (e.g. "100 ms"). Compared against parent SG FTTI by the timing diagnostic.',
-        'Reaches': 'Derived (read-only): whether this transition reaches a safe state, based on the target mode being marked a safe state in Item Definition. Hover the label for the reason.'
+        'Time':    'Time budget for the transition to complete (e.g. "100 ms"). Compared against the governing FTTI by the timing diagnostic.',
+        'Safety Goal': 'Optional. The Safety Goal whose FTTI governs this transition\'s time budget. Set it to time-check a transition against a real FTTI WITHOUT marking its target a safe state. Leave empty to fall back to the FTTI of the goal guarding the target safe state (if any). Linking a goal here does NOT make the target a safe state.',
+        'Reaches': 'Derived (read-only): whether this transition reaches a safe state, based on the target mode being marked a safe state in Item Definition. Independent of the Safety Goal link. Hover the label for the reason.'
     },
-    headers: ['ID', 'From', 'To', 'Trigger', 'Guard', 'Time', 'Reaches', ''],
-    gridCols: '90px 130px 130px 1fr 1fr 90px 110px 40px',
+    headers: ['ID', 'From', 'To', 'Trigger', 'Guard', 'Time', 'Safety Goal', 'Reaches', ''],
+    gridCols: '90px 120px 120px 1fr 1fr 80px 160px 110px 40px',
     getList: doc => doc.modeTransitions,
     add: doc => {
         const t = new ModeTransition();
@@ -42,6 +43,7 @@ Declarations.register('modeTransition', {
         item.trigger        = inputs[0].value;
         item.guard          = inputs[1].value;
         item.transitionTime = inputs[2].value;
+        item.safetyGoalRef  = selects[2] ? selects[2].value : (item.safetyGoalRef || '');
         // "reaches a safe state" is derived from the target mode — not set here.
     },
     commitFromRow: (doc, id) => {
@@ -55,6 +57,7 @@ Declarations.register('modeTransition', {
         <input type="text" list="lex-triggers" value="${(item.trigger||'').replace(/"/g,'&quot;')}" placeholder="e.g. ignition off">
         <input type="text" value="${(item.guard||'').replace(/"/g,'&quot;')}" placeholder="optional precondition">
         <input type="text" value="${(item.transitionTime||'').replace(/"/g,'&quot;')}" placeholder="100 ms">
+        <select data-tr="sg" title="Safety Goal whose FTTI governs this transition (optional)."></select>
         <span data-tr="reaches" style="align-self:center;font-size:11px;"></span>
         <button class="del-btn req-delete" title="Delete this transition">✕</button>
     `,
@@ -68,6 +71,20 @@ Declarations.register('modeTransition', {
         };
         fill(row.querySelector('select[data-tr="from"]'), item.fromMode);
         fill(row.querySelector('select[data-tr="to"]'),   item.toMode);
+
+        // Safety Goal link — the FTTI source for this transition's timing
+        // check. Optional and orthogonal to safe-state status: an author can
+        // give an operational transition a real FTTI without pretending its
+        // target is a safe state (which used to be the only way).
+        const sgSel = row.querySelector('select[data-tr="sg"]');
+        if (sgSel) {
+            const opts = ['<option value="">— none —</option>'].concat(
+                (doc.safetyGoals || []).map(g => {
+                    const label = `${(g.name || g.id)}${g.ftti ? ` · FTTI ${g.ftti}` : ' · no FTTI'}`;
+                    return `<option value="${g.id}" ${g.id === item.safetyGoalRef ? 'selected' : ''}>${label.replace(/"/g,'&quot;')}</option>`;
+                }));
+            sgSel.innerHTML = opts.join('');
+        }
 
         // Derived, read-only "reaches a safe state?" label. The target
         // mode's safe-state status is already declared in Item Definition,

@@ -167,16 +167,21 @@ function tmRefOptions(doc, kind) {
 }
 
 /** The time budget a chain must fit: the transition's transitionTime, or
- *  the governing safe-state FTTI as a fallback. Returns {ms, src, text}. */
+ *  the governing FTTI as a fallback (explicit Safety Goal link first, then
+ *  the goal guarding the target safe state). Returns {ms, src, text}. */
 function tmChainBudget(doc, tr) {
     if (!tr) return { ms: null, src: null, text: '' };
     const tt = Timing.parseMs(tr.transitionTime);
     if (tt != null && !isNaN(tt)) return { ms: tt, src: 'transition time', text: tr.transitionTime };
-    const ss = tmSafeStateForMode(doc, tr.toMode);
-    const sg = tmSgForSafeState(doc, ss);
-    const f = sg ? Timing.parseMs(sg.ftti) : null;
-    if (f != null && !isNaN(f)) return { ms: f, src: 'FTTI', text: sg.ftti };
+    const gov = governingFttiForTransition(doc, tr);
+    if (gov.ms != null && !isNaN(gov.ms)) return { ms: gov.ms, src: 'FTTI', text: gov.text };
     return { ms: null, src: null, text: '' };
+}
+
+/** The Safety Goal governing a transition (explicit link first, else the
+ *  goal guarding the target safe state). UI helper for ASIL/FTTI display. */
+function tmGoverningSg(doc, tr) {
+    return governingFttiForTransition(doc, tr).sg || null;
 }
 
 
@@ -553,7 +558,7 @@ class ChainRequirementGenerator {
             if (elemSegs.length === 0) return;
 
             const ss  = tmSafeStateForMode(this.doc, toMode.id);
-            const sg  = tmSgForSafeState(this.doc, ss);
+            const sg  = tmGoverningSg(this.doc, tr);
             const asil = sg ? sg.asil : '';
             const safeLabel = ss ? (ss.description || toName) : toName;
             const ftti = sg ? sg.ftti : '';

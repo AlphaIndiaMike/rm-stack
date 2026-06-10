@@ -45,7 +45,7 @@ class ElementCoverageDiagnostic {
             <div>ASIL</div>
             <div>Reqs / 4–13</div>
             <div>Allocated fns</div>
-            <div>Has parent SG</div>
+            <div>Traces to SG</div>
             <div>Has acceptance</div>
             <div>Status</div>
         `;
@@ -53,9 +53,11 @@ class ElementCoverageDiagnostic {
 
         const validator = new DocumentValidator(this.doc);
         const cov = validator.elementCoverage();
+        // "Traces to SG" follows the real chain (TSR → acceptance → FSR → SG)
+        // via the validator, not a direct parentSG field a TSR cannot carry.
         cov.forEach(c => {
             const reqs = this.doc.requirementsForElement(c.id);
-            const hasSG = reqs.some(r => r.parentSG);
+            const hasSG = validator.elementTracesToSG(c.id);
             const hasAccept = reqs.some(r =>
                 Array.isArray(r.parentAcceptanceReqs) && r.parentAcceptanceReqs.length > 0);
             let status = 'green';
@@ -63,8 +65,8 @@ class ElementCoverageDiagnostic {
             if (c.empty)            { status = 'red';    issues.push('no requirements'); }
             else if (c.overBudget)  { status = 'red';    issues.push(`${c.reqCount} > 13`); }
             else if (c.underBudget) { status = 'orange'; issues.push(`${c.reqCount} < 4`); }
-            if (!hasSG)             { if (status === 'green') status = 'orange'; issues.push('no parent SG'); }
             if (!hasAccept)         { if (status === 'green') status = 'orange'; issues.push('no parent acceptance'); }
+            if (!hasSG)             { if (status === 'green') status = 'orange'; issues.push('no trace to a Safety Goal'); }
             const statusLabel = status === 'green' ? '✓ ok'
                 : status === 'orange' ? '⚠ ' + issues.join(', ')
                 : '✗ ' + issues.join(', ');
