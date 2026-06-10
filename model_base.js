@@ -733,7 +733,13 @@ class SyrsDocument {
         this.projectName   = data.projectName || '';
         this.discipline    = data.discipline || 'system';
         this.docClass      = data.docClass || 'complex';
-        this.title         = data.title || 'Untitled System Requirements Specification';
+        // Optional author-supplied document title. Empty by default so the
+        // exporters fall back to the active discipline's own title
+        // (System/Hardware/Software Requirements Specification, Item
+        // Definition & FSC) — which tracks the discipline the user selects,
+        // instead of a fixed "...System..." string. Set a non-empty value
+        // only to override that per-discipline title.
+        this.title         = data.title || '';
         this.requirements  = (data.requirements || []).map(r => new Requirement(r));
         this.elements      = (data.elements || []).map(e => new Element(e));
         this.itemFunctions = (data.itemFunctions || []).map(f => new ItemFunction(f));
