@@ -30,10 +30,12 @@
             </div>
             <div class="header-control-group">
                 <span class="header-control-label">Class</span>
-                <select id="docClassSelect">
-                    <option value="simple">Simple (≤200)</option>
-                    <option value="complex" selected>Complex (≤300)</option>
-                    <option value="adas">ADAS Platform (≤400)</option>
+                <select id="docClassSelect"
+                        title="Document size class. Sets the per-discipline requirement ceilings: Item is the reference, System = 3×Item, HW and SW = 3×System. See the Requirement Budget panel for the resolved limits.">
+                    <option value="simple">Simple</option>
+                    <option value="medium">Medium</option>
+                    <option value="advanced">Advanced</option>
+                    <option value="complex" selected>Complex</option>
                 </select>
             </div>
         </div>
@@ -57,7 +59,7 @@
                 <button id="saveJsonButton"  class="btn-hd btn-hd-primary">Save Project</button>
             </div>
 
-            <span class="app-version" title="Application version">v1.5.2</span>
+            <span class="app-version" title="Application version">v1.5.7</span>
         </div>
     </header>
 
@@ -67,7 +69,7 @@
         <aside id="leftPane" class="pane pane-left">
             <div class="pane-header">
                 <h6 class="mb-0">Document Outline</h6>
-                <span id="budgetCounter" class="budget-badge">0 / 300</span>
+                <span id="budgetCounter" class="budget-badge" title="Completeness of the selected discipline">0 %</span>
             </div>
             <div id="outlineContainer" class="pane-body"></div>
         </aside>

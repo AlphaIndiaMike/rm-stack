@@ -69,36 +69,54 @@ function findChapter(disciplineId, chapterId) {
     return Chapters.get(disciplineId, chapterId);
 }
 
-/** Budget ceilings per document class. Lives here because the legacy
- *  outline.js used to define both, and the validator imports it. */
+/** Budget ceilings per document class.
+ *
+ *  v1.5.3: the anchor moved from System to ITEM, and the classes got
+ *  size names instead of product names ("ADAS Platform" was a product,
+ *  not a class). `max` is the ITEM-level requirement ceiling; the other
+ *  disciplines derive from it via DISCIPLINE_BUDGET_FACTORS:
+ *      Item = reference · System = 3×Item · HW = 3×System · SW = 3×System
+ *  Legacy docClass values in old saves ('adas') are normalised on load
+ *  (see SyrsDocument constructor). */
 const CLASS_BUDGETS = {
-    simple:  { max: 200, label: 'Simple' },
-    complex: { max: 300, label: 'Complex' },
-    adas:    { max: 400, label: 'ADAS Platform' }
+    simple:   { max: 50,  label: 'Simple' },
+    medium:   { max: 100, label: 'Medium' },
+    advanced: { max: 150, label: 'Advanced' },
+    complex:  { max: 300, label: 'Complex' }
 };
 
 /** Per-discipline requirement budgets, expressed as a factor of the
- *  System ceiling (CLASS_BUDGETS[docClass].max).
+ *  ITEM ceiling (CLASS_BUDGETS[docClass].max).
  *
- *  The System discipline IS the existing class ceiling (factor 1) — that
- *  mechanic is untouched, it stays driven by the Class dropdown. The
- *  other three scale off whatever System resolves to:
+ *  Item is the reference (factor 1): the concept layer (Item Definition
+ *  + HARA + FSC) is the smallest, most stable statement of the problem.
+ *  Each refinement step multiplies by ~3:
  *
- *    item     1/3 — concept layer (Item Definition + HARA + FSC). A
- *                   third of System: it states goals and the safety
- *                   concept, not the full system contract.
- *    system   1   — the existing, tuned ceiling. Do not retune here;
- *                   retune via CLASS_BUDGETS so System stays the anchor.
- *    hardware 3   — HW-RS decomposes the System contract into far more
- *    software 3     detail (component design, FMEDA, units, ...), so the
- *                   spec legitimately runs ~3x the System count.
+ *    item     1 — the reference ceiling, driven by the Class dropdown.
+ *    system   3 — the System contract decomposes each concept-level
+ *                 statement into roughly three system requirements.
+ *    hardware 9 — 3× System: HW-RS decomposes the System contract into
+ *    software 9   far more detail (component design, FMEDA, units, ...).
  *
  *  These are the initial limits and the single place to retune them.
  *  Edit a factor here; the validator and both budget readouts pick it
- *  up. A missing entry falls back to factor 1 (same as System). */
+ *  up. A missing entry falls back to factor 1 (same as Item). */
 const DISCIPLINE_BUDGET_FACTORS = {
-    item:     1 / 3,
-    system:   1,
-    hardware: 3,
-    software: 3
+    item:     1,
+    system:   3,
+    hardware: 9,
+    software: 9
+};
+
+/** Development-cost estimate: EUR per requirement WORD, per discipline.
+ *  Used by the right-pane "Budget Est." panel. The estimate is words of
+ *  the built requirement statement × the owning discipline's rate,
+ *  summed over all requirements (requirements only — declarations,
+ *  diagnostics and other tooling don't cost into the product).
+ *  This is the single place to retune the rates. */
+const BUDGET_COST_RATES_EUR_PER_WORD = {
+    item:     3000,
+    system:   1000,
+    hardware: 1000,
+    software: 500
 };

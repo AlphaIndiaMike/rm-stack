@@ -38,11 +38,52 @@ class ModeDiagnosticsView {
         wrap.innerHTML = `<div class="section-title">Mode-Model Diagnostics
             <span class="help-icon" title="Static analysis of the modes / transitions / safe-states declared above. Updates whenever the data changes; nothing here blocks save.">?</span>
         </div>`;
+        wrap.appendChild(this._modeReadout(v.modeSafetyReadout()));
+        wrap.appendChild(this._list('Safe-state consistency', v.safeStateConsistency(),
+            'Every mode that reads SAFE is also flagged in Item Definition — all views agree.'));
         wrap.appendChild(this._list('Forgotten transitions', v.forgottenTransitions(),
             'Every mode looks reachable and terminating.'));
         wrap.appendChild(this._list('Timing vs FTTI', v.timingCrosscheck(),
             "Every transition into a safe state fits within its Safety Goal's FTTI."));
         container.appendChild(wrap);
+    }
+
+    /** How the tool reads each mode (SAFE/operational) and why. Modes are
+     *  declared in Item Definition, but their effective safety status is
+     *  the OR of the Item flag and SafeState.modeRefs — and transitions
+     *  are edited HERE, so the combined truth must be visible here too. */
+    _modeReadout(readout) {
+        const block = document.createElement('div');
+        block.style.marginBottom = '0.75rem';
+        const h = document.createElement('div');
+        h.style.cssText = 'font-size:11px;text-transform:uppercase;color:var(--text-dim);letter-spacing:0.5px;margin-bottom:0.3rem;';
+        h.innerHTML = `Mode safety readout <span class="help-icon" title="How the tool reads each declared mode. A mode is SAFE if its Item-Definition 'Safe state?' flag is ticked OR a declared Safe State lists it under 'Modes' (modes that realise that safe state). The 'Reaches' column of every transition follows this readout.">?</span>`;
+        block.appendChild(h);
+        if (readout.length === 0) {
+            const none = document.createElement('div');
+            none.style.cssText = 'font-size:12px;color:var(--text-dim);padding:0.25rem 0.5rem;';
+            none.textContent = 'No modes declared yet (declare them in Item Definition).';
+            block.appendChild(none);
+            return block;
+        }
+        const ul = document.createElement('ul');
+        ul.style.cssText = 'list-style:none;margin:0;padding:0;font-size:12px;';
+        readout.forEach(r => {
+            const li = document.createElement('li');
+            li.style.cssText = 'display:flex;gap:0.5rem;align-items:baseline;padding:0.12rem 0.5rem;';
+            const why = r.safe
+                ? [r.viaFlag ? 'Item-Definition flag' : '',
+                   r.viaRefs.length ? `realises ${r.viaRefs.join(', ')}` : '']
+                    .filter(Boolean).join(' + ')
+                : 'neither flagged nor realising a safe state';
+            li.innerHTML = `
+                <span style="min-width:52px;font-weight:600;color:${r.safe ? 'var(--green)' : 'var(--text-mid)'};">${r.safe ? '⛟ SAFE' : 'oper.'}</span>
+                <span style="flex:1;">${(r.name || '').replace(/</g,'&lt;')}</span>
+                <span style="color:var(--text-dim);" title="Why the tool reads it this way">${why}</span>`;
+            ul.appendChild(li);
+        });
+        block.appendChild(ul);
+        return block;
     }
 
     _list(title, issues, emptyText) {
@@ -285,6 +326,12 @@ class ModeRequirementGenerator {
                 conditionalText: t.trigger,
                 subject: 'the system',
                 predicate: 'transition',
+                // The guard is the EARS precondition — it MUST survive into
+                // the generated requirement, or the spec demands the
+                // transition unconditionally when the model said it only
+                // applies while the guard holds. buildStatement renders it
+                // as the combined pattern "While [guard], when [trigger], …".
+                stateGuard: t.guard || '',
                 fromState: fromName,
                 toState:   toName,
                 trigger:   t.trigger,

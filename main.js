@@ -304,13 +304,16 @@ function renderAll() {
     if (actions) actions.classList.toggle('hidden', !inEditor);
     if (header)  header.classList.toggle('d-none', !inEditor); // Bootstrap d-none still loaded via CDN — OK
 
-    // Update budget counter in top bar
+    // Update the outline-pane completeness badge: how many of the selected
+    // discipline's outline chapters are GREEN (checklists fully done — the
+    // same rule that colours the outline). Deliberately NOT a requirement
+    // count: budgets and the cost estimate make requirements feel
+    // expensive; completeness must reward chapters turning green instead.
     const validator = new DocumentValidator(doc);
-    const s = validator.budgetStatus();
+    const ds = validator.disciplineCompleteness(doc.discipline);
     const counter = document.getElementById('budgetCounter');
-    counter.textContent = `${s.count} / ${s.max}`;
-    counter.className = s.overBudget ? 'budget-badge over' : s.percent > 80 ? 'budget-badge warn' : 'budget-badge ok';
-    const ds = validator.disciplineBudgetStatus(doc.discipline);
+    counter.textContent = `${ds.percent} %`;
+    counter.className = ds.percent >= 100 ? 'budget-badge ok' : ds.percent >= 50 ? 'budget-badge warn' : 'budget-badge over';
     const discLabel = (Disciplines.get(doc.discipline) || {}).label || doc.discipline;
-    counter.title = `Total committed requirements (${s.count}) vs the document-class ceiling (${s.max}). Going over budget is the cue to split into HW-RS / SW-RS documents.\n\nActive discipline — ${discLabel}: ${ds.count} / ${ds.max}. Per-discipline breakdown is in the right-pane Requirement Budget panel.`;
+    counter.title = `Completeness of the ${discLabel} discipline: ${ds.green} of ${ds.total} outline chapters are green (chapter checklist fully done — the same rule that colours the outline). Requirement counts don't raise this number; they only raise cost. Budgets are in the right-pane Requirement Budget panel.`;
 }

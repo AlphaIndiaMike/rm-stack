@@ -732,7 +732,15 @@ class SyrsDocument {
         // the header pill. Empty string means "unnamed".
         this.projectName   = data.projectName || '';
         this.discipline    = data.discipline || 'system';
-        this.docClass      = data.docClass || 'complex';
+        // docClass: v1.5.3 renamed the classes (Simple/Medium/Advanced/
+        // Complex, item-anchored). Legacy 'adas' (a product name, not a
+        // class) maps to 'complex' — its old system ceiling of 400 is
+        // closest to complex's new system ceiling (3 × 300 item = 900 is
+        // the new scale; 'complex' is the largest class either way).
+        const legacyClassMap = { adas: 'complex' };
+        const rawClass = data.docClass || 'complex';
+        this.docClass      = CLASS_BUDGETS[rawClass] ? rawClass
+                           : (legacyClassMap[rawClass] || 'complex');
         // Optional author-supplied document title. Empty by default so the
         // exporters fall back to the active discipline's own title
         // (System/Hardware/Software Requirements Specification, Item

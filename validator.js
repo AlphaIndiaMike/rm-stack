@@ -29,25 +29,38 @@ class DocumentValidator {
         return 'red';
     }
 
-    /** Total requirement count vs class budget. Unchanged — this is the
-     *  "applies overall" number shown in the top bar. */
-    budgetStatus() {
-        const total = this.doc.requirements.length;
-        const budget = CLASS_BUDGETS[this.doc.docClass] || CLASS_BUDGETS.complex;
+    /** Completeness of one discipline: how many of its outline chapters
+     *  are GREEN (checklist fully done — the same rule that colours the
+     *  outline), as a percentage.
+     *
+     *  v1.5.5: this deliberately does NOT count requirements. Budgets and
+     *  the cost estimate exist to make more requirements feel expensive;
+     *  a completeness number that grew with the requirement count would
+     *  incentivise exactly the opposite. Progress = chapters turning
+     *  green in the outline. */
+    disciplineCompleteness(disciplineId) {
+        const chapters = Chapters.outline(disciplineId) || [];
+        const perChapter = chapters.map(ch => {
+            const checklist = ch.checklist || [];
+            if (checklist.length === 0) return true;   // nothing to do = done
+            const state = this.doc.checklistBucket(disciplineId, ch.id);
+            return checklist.every(c => state[c.id]);
+        });
+        const green = perChapter.filter(Boolean).length;
         return {
-            count: total,
-            max: budget.max,
-            overBudget: total > budget.max,
-            percent: Math.round((total / budget.max) * 100)
+            discipline: disciplineId,
+            green,
+            total: chapters.length,
+            percent: chapters.length > 0
+                ? Math.round((green / chapters.length) * 100) : 0
         };
     }
 
-    /** Per-discipline budget. Sits next to the overall budget, it does
-     *  not replace it.
+    /** Per-discipline budget.
      *
-     *  Ceiling: the System discipline resolves to the document-class
-     *  ceiling (the existing, happy-with-it number); the other three
-     *  scale off it via DISCIPLINE_BUDGET_FACTORS (item 1/3, hw/sw 3x).
+     *  Ceiling: the ITEM discipline resolves to the document-class
+     *  ceiling; the other three scale off it via
+     *  DISCIPLINE_BUDGET_FACTORS (system 3×item, hw/sw 3×system).
      *
      *  Count: requirements whose chapter is in this discipline's outline.
      *  The outline is the same partition the editor and exporter use, so
@@ -57,12 +70,12 @@ class DocumentValidator {
      *  count toward every discipline that surfaces them — consistent
      *  with the one-JSON-four-views rule: the budget is a view too. */
     disciplineBudgetStatus(disciplineId) {
-        const systemMax =
+        const itemMax =
             (CLASS_BUDGETS[this.doc.docClass] || CLASS_BUDGETS.complex).max;
         const factor = DISCIPLINE_BUDGET_FACTORS[disciplineId] != null
             ? DISCIPLINE_BUDGET_FACTORS[disciplineId]
             : 1;
-        const max = Math.round(systemMax * factor);
+        const max = Math.round(itemMax * factor);
         const chapterIds = new Set(
             (Chapters.outline(disciplineId) || []).map(c => c.id));
         const count = this.doc.requirements.filter(
@@ -86,6 +99,58 @@ class DocumentValidator {
             label: d.label,
             ...this.disciplineBudgetStatus(d.id)
         }));
+    }
+
+    /** Development-cost estimate (right-pane "Budget Est." panel).
+     *
+     *  Model: every WORD of every built requirement statement costs the
+     *  owning discipline's rate (BUDGET_COST_RATES_EUR_PER_WORD, the
+     *  single retuning point in chapter_registry.js); per-discipline
+     *  costs amount together into the final figure. Requirements only —
+     *  declarations, diagnostics and other tooling don't cost into the
+     *  product.
+     *
+     *  Owning discipline: the FIRST discipline (in registry order:
+     *  Item, System, HW, SW) whose outline contains the requirement's
+     *  chapter. Chapters shared between disciplines (e.g. ch09_hsi)
+     *  would otherwise charge the same words several times — a cost is
+     *  incurred once, unlike a budget *view* which legitimately shows
+     *  the same requirement in several ceilings.
+     *
+     *  Words: whitespace-split tokens of GrammarValidator.buildStatement
+     *  (the same sentence the export prints). Incomplete statements
+     *  count the words they have so far — a half-written requirement
+     *  already costs.
+     *
+     *  Returns { perDiscipline: [{id, label, reqCount, words, rate,
+     *  cost}...], totalWords, totalCost }. */
+    budgetEstimate() {
+        const disciplines = Disciplines.all();
+        const chapterSets = disciplines.map(d => ({
+            id: d.id, label: d.label,
+            chapters: new Set((Chapters.outline(d.id) || []).map(c => c.id))
+        }));
+        const buckets = new Map(disciplines.map(d =>
+            [d.id, { id: d.id, label: d.label, reqCount: 0, words: 0,
+                     rate: BUDGET_COST_RATES_EUR_PER_WORD[d.id] != null
+                         ? BUDGET_COST_RATES_EUR_PER_WORD[d.id] : 0,
+                     cost: 0 }]));
+        this.doc.requirements.forEach(req => {
+            const owner = chapterSets.find(cs => cs.chapters.has(req.chapterId));
+            if (!owner) return;                       // stranded chapter: no view, no cost
+            const stmt = GrammarValidator.buildStatement(req) || '';
+            const words = stmt.trim() ? stmt.trim().split(/\s+/).length : 0;
+            const b = buckets.get(owner.id);
+            b.reqCount++;
+            b.words += words;
+            b.cost  += words * b.rate;
+        });
+        const perDiscipline = Array.from(buckets.values());
+        return {
+            perDiscipline,
+            totalWords: perDiscipline.reduce((a, b) => a + b.words, 0),
+            totalCost:  perDiscipline.reduce((a, b) => a + b.cost, 0)
+        };
     }
 
     /** Orphan report — requirements referencing undeclared things.
@@ -394,6 +459,58 @@ class DocumentValidator {
     }
 
     /**
+     * Per-mode safety readout: how the tool reads each mode and WHY.
+     * The effective status is the OR of the two declaration paths —
+     * the Item-Definition "Safe state?" flag (Mode.isSafeState) and
+     * realisation by a declared SafeState (SafeState.modeRefs, edited
+     * in the Safe States table, e.g. in System Chapter 3). Both paths
+     * are equally valid; this readout exists because each editing
+     * surface shows only its own path, so the System Breakdown needs
+     * one place that shows the combined truth per mode.
+     * Returns [{ id, name, safe, viaFlag, viaRefs: [ssId...] }].
+     */
+    modeSafetyReadout() {
+        const safeStates = this.doc.safeStates || [];
+        return (this.doc.modes || []).map(m => {
+            const viaRefs = safeStates
+                .filter(ss => (ss.modeRefs || []).includes(m.id))
+                .map(ss => ss.id);
+            return {
+                id: m.id,
+                name: m.name || m.id,
+                viaFlag: !!m.isSafeState,
+                viaRefs,
+                safe: !!m.isSafeState || viaRefs.length > 0
+            };
+        });
+    }
+
+    /**
+     * Safe-state consistency warnings. The one trap worth flagging:
+     * a mode whose Item-Definition flag says OPERATIONAL but which a
+     * SafeState's "Modes" multiselect makes read SAFE. That is legal
+     * (the flag is optional; modeRefs is a first-class declaration
+     * path) — but when it happens by accident the author sees
+     * operational in the mode table and "safe state" on transitions,
+     * with no visible cause. Each warning names the mode, the
+     * SafeState(s) doing it, and the repair on either path.
+     */
+    safeStateConsistency() {
+        const issues = [];
+        this.modeSafetyReadout().forEach(r => {
+            if (!r.viaFlag && r.viaRefs.length > 0) {
+                const labels = r.viaRefs.map(id => {
+                    const ss = (this.doc.safeStates || []).find(s => s.id === id);
+                    return ss ? `"${ss.description || ss.id}"` : id;
+                }).join(', ');
+                issues.push({ kind: 'safe-via-refs-only', modeId: r.id,
+                    text: `Mode "${r.name}" reads SAFE only because Safe State ${labels} lists it under "Modes" (modes that REALISE the safe state). If "${r.name}" is operational, remove it from that Safe State's Modes; if it genuinely realises the safe state, consider also ticking its "Safe state?" flag in Item Definition so every view agrees.` });
+            }
+        });
+        return issues;
+    }
+
+    /**
      * Forgotten transitions in the mode graph. Flags:
      *   - transitions referencing a deleted mode or Safety Goal (orphans
      *     from saves predating deletion cascades; repairable in the row,
@@ -414,11 +531,11 @@ class DocumentValidator {
             if (t.toMode   && !modeIds.has(t.toMode))   dead.push(`target mode ${t.toMode}`);
             if (dead.length) {
                 issues.push({ kind: 'dead-mode-ref', tId: t.id,
-                    text: `Transition ${t.id} references a deleted ${dead.join(' and ')} — orphaned. In System Breakdown, re-select a live mode in the row (the dead reference is shown in amber) or delete the transition.` });
+                    text: `Transition ${this._trLabel(t)} references a deleted ${dead.join(' and ')} — orphaned. In System Breakdown, re-select a live mode in the row (the dead reference is shown in amber) or delete the transition.` });
             }
             if (t.safetyGoalRef && !sgIds.has(t.safetyGoalRef)) {
                 issues.push({ kind: 'dead-sg-link', tId: t.id,
-                    text: `Transition ${t.id} links deleted Safety Goal ${t.safetyGoalRef} — no FTTI can govern it. Pick a live goal in the row or clear the link.` });
+                    text: `Transition ${this._trLabel(t)} links deleted Safety Goal ${t.safetyGoalRef} — no FTTI can govern it. Pick a live goal in the row or clear the link.` });
             }
         });
         modes.forEach(m => {
@@ -470,19 +587,19 @@ class DocumentValidator {
                 : `safe state "${this._safeStateLabelForTransition(t)}"`;
             if (isNaN(gov.ms)) {                                  // goal chosen but its FTTI is unparseable
                 issues.push({ kind: 'ftti-unparseable', tId: t.id,
-                    text: `Transition ${t.id}: governing FTTI "${gov.text}" is not a parseable duration.` });
+                    text: `Transition ${this._trLabel(t)}: governing FTTI "${gov.text}" is not a parseable duration.` });
                 return;
             }
             const ttMs = Timing.parseMs(t.transitionTime);
             if (ttMs == null) {
                 issues.push({ kind: 'ttime-missing', tId: t.id,
-                    text: `Transition ${t.id} has a governing FTTI (${Timing.formatMs(gov.ms)}, from ${where}) but no transition time; it cannot be checked.` });
+                    text: `Transition ${this._trLabel(t)} has a governing FTTI (${Timing.formatMs(gov.ms)}, from ${where}) but no transition time; it cannot be checked.` });
             } else if (isNaN(ttMs)) {
                 issues.push({ kind: 'ttime-unparseable', tId: t.id,
-                    text: `Transition ${t.id}: time "${t.transitionTime}" not parseable as a duration.` });
+                    text: `Transition ${this._trLabel(t)}: time "${t.transitionTime}" not parseable as a duration.` });
             } else if (ttMs > gov.ms) {
                 issues.push({ kind: 'ttime-over-ftti', tId: t.id,
-                    text: `Transition ${t.id} takes ${Timing.formatMs(ttMs)} but its governing FTTI (from ${where}) is ${Timing.formatMs(gov.ms)}.` });
+                    text: `Transition ${this._trLabel(t)} takes ${Timing.formatMs(ttMs)} but its governing FTTI (from ${where}) is ${Timing.formatMs(gov.ms)}.` });
             }
         });
         return issues;
@@ -493,6 +610,19 @@ class DocumentValidator {
     _safeStateLabelForTransition(t) {
         const ss = (this.doc.safeStates || []).find(s => (s.modeRefs || []).includes(t.toMode));
         return ss ? (ss.description || ss.id) : '';
+    }
+
+    /** Human label for a transition in diagnostic texts: the ID plus the
+     *  FROM → TO mode names, so the user knows which row to go to without
+     *  decoding IDs. Dead/empty endpoints render as the raw ID or "?" so
+     *  orphans stay identifiable. */
+    _trLabel(t) {
+        const name = id => {
+            if (!id) return '?';
+            const m = (this.doc.modes || []).find(x => x.id === id);
+            return m ? (m.name || m.id) : id;
+        };
+        return `${t.id} (${name(t.fromMode)} → ${name(t.toMode)})`;
     }
 
     /**
@@ -601,16 +731,16 @@ class DocumentValidator {
                 const ttMs = Timing.parseMs(t.transitionTime);
                 if (fttiMs == null) {
                     issues.push({ kind: 'no-ftti', tId: t.id,
-                        text: `Safe-state transition ${t.id} (→ ${ssLabel}) has no governing FTTI — link the target safe state to a Safety Goal with an FTTI to time-check it.` });
+                        text: `Safe-state transition ${this._trLabel(t)} into "${ssLabel}" has no governing FTTI — link the target safe state to a Safety Goal with an FTTI to time-check it.` });
                 } else if (ttMs == null) {
                     issues.push({ kind: 'ttime-missing', tId: t.id,
-                        text: `Safe-state transition ${t.id} has no transition time; FTTI ${Timing.formatMs(fttiMs)} cannot be checked.` });
+                        text: `Safe-state transition ${this._trLabel(t)} has no transition time; FTTI ${Timing.formatMs(fttiMs)} cannot be checked.` });
                 } else if (isNaN(ttMs)) {
                     issues.push({ kind: 'ttime-unparseable', tId: t.id,
-                        text: `Safe-state transition ${t.id}: time "${t.transitionTime}" is not a parseable duration.` });
+                        text: `Safe-state transition ${this._trLabel(t)}: time "${t.transitionTime}" is not a parseable duration.` });
                 } else if (ttMs > fttiMs) {
                     issues.push({ kind: 'ttime-over-ftti', tId: t.id,
-                        text: `Safe-state transition ${t.id} takes ${Timing.formatMs(ttMs)} but the governing FTTI for "${ssLabel}" is ${Timing.formatMs(fttiMs)}.` });
+                        text: `Safe-state transition ${this._trLabel(t)} takes ${Timing.formatMs(ttMs)} but the governing FTTI for "${ssLabel}" is ${Timing.formatMs(fttiMs)}.` });
                 }
             });
         return issues;

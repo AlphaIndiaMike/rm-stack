@@ -15,7 +15,7 @@ Declarations.register('safeState', {
     helpHeaders: {
         'Description':  'Prose description — what is true while the system is in this safe state.',
         'Triggers':     'Conditions that demand the system enter this safe state.',
-        'Modes':        'Multi-select. Pick the declared Operating Mode(s) that realize this safe state.',
+        'Modes':        'Multi-select. Pick ONLY the Operating Mode(s) that realize this safe state — i.e. being in that mode IS being in this safe state. Every mode picked here will read as SAFE everywhere (transition "Reaches" column, timing checks). Do NOT pick the operational modes this safe state protects or is reachable from.',
         'Safety Goals': 'Multi-select. Pick the Safety Goal(s) that reference this safe state as their fault-reaction target.'
     },
     headers: ['ID', 'Description', 'Triggers', 'Modes', 'Safety Goals', ''],

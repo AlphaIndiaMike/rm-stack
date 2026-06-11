@@ -848,6 +848,12 @@ body { overflow-x: auto; }
    visible so the author can re-link or clear it — never silently lost). */
 .declaration-row select option.dead-ref,
 .declaration-row select.has-dead-ref { color: var(--amber); }
+/* Derived "Reaches" label on mode-transition rows — one class per state. */
+.tr-reaches { align-self: center; font-size: 11px; white-space: nowrap; }
+.tr-reaches.safe        { color: var(--green); }
+.tr-reaches.operational { color: var(--red); font-weight: 600; }
+.tr-reaches.orphaned    { color: var(--amber); }
+.tr-reaches.unset       { color: var(--text-dim); }
 .declaration-row input:focus,
 .declaration-row select:focus { border-color: var(--border-focus); background: var(--bg-panel); }
 

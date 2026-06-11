@@ -41,6 +41,9 @@ class SummaryView {
 
         // Orphans
         container.appendChild(this._orphansSection(validator));
+
+        // Budget Est. — development-cost estimate from requirement words
+        container.appendChild(this._budgetEstimateSection(validator));
     }
 
     /** Requirement Budget — per-discipline committed/ceiling. */
@@ -194,6 +197,31 @@ class SummaryView {
             badgeTitle: o.issue,
             cls: 'error'
         })), orph.length === 0 ? 'No orphans' : null, tip);
+    }
+
+    /** Budget Est. — development-cost estimate. Every word of every built
+     *  requirement statement costs its discipline's per-word rate (see
+     *  BUDGET_COST_RATES_EUR_PER_WORD in chapter_registry.js — the single
+     *  retuning point); discipline costs amount together into the final
+     *  figure. Requirements only — declarations and tooling don't cost
+     *  into the product. */
+    _budgetEstimateSection(validator) {
+        const est = validator.budgetEstimate();
+        const fmt = n => n.toLocaleString('de-DE'); // 21.000 style
+        const tip = 'Development-cost estimate: each requirement word costs the discipline\'s configured rate (EUR/word, see chapter_registry.js), and the discipline costs amount together into the final figure. Requirements only — declarations and diagnostics don\'t cost into the product.';
+        const items = est.perDiscipline.map(d => ({
+            text: `${d.label} <small style="color:#999;">${d.reqCount} req · ${d.words} words × ${fmt(d.rate)} €</small>`,
+            badge: `${fmt(d.cost)} €`,
+            badgeTitle: `${d.words} words × ${fmt(d.rate)} €/word = ${fmt(d.cost)} €`,
+            cls: ''
+        }));
+        items.push({
+            text: '<strong>Estimated development cost</strong>',
+            badge: `<strong>${fmt(est.totalCost)} €</strong>`,
+            badgeTitle: `${est.totalWords} requirement words across all disciplines`,
+            cls: ''
+        });
+        return this._makeList('Budget Est.', null, items, 'no requirements yet', tip);
     }
 
     _makeList(title, count, items, emptyText, sectionTip) {

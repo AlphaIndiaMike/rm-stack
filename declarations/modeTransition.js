@@ -18,14 +18,14 @@ Declarations.register('modeTransition', {
     helpHeaders: {
         'From':    'Source mode the transition starts in.',
         'To':      'Target mode the transition ends in.',
-        'Trigger': 'Event or condition that causes the transition to fire.',
-        'Guard':   'Optional precondition that must be true for the trigger to take effect.',
-        'Time':    'Time budget for the transition to complete (e.g. "100 ms"). Compared against the governing FTTI by the timing diagnostic.',
         'Safety Goal': 'Optional. The Safety Goal whose FTTI governs this transition\'s time budget. Set it to time-check a transition against a real FTTI WITHOUT marking its target a safe state. Leave empty to fall back to the FTTI of the goal guarding the target safe state (if any). Linking a goal here does NOT make the target a safe state.',
+        'Time':    'Time budget for the transition to complete (e.g. "100 ms"). Compared against the governing FTTI by the timing diagnostic.',
+        'Trigger': 'The EVENT that fires the transition (EARS "When …"), e.g. "ignition off", "fault detected".',
+        'Guard':   'Optional PRECONDITION that must already be true for the trigger to take effect (EARS "While …"), e.g. "vehicle speed < 5 km/h". Not the same as the trigger: the trigger is the event, the guard is the state it must occur in. Leave empty when the trigger applies unconditionally.',
         'Reaches': 'Derived (read-only): whether this transition reaches a safe state, based on the target mode being marked a safe state in Item Definition. Independent of the Safety Goal link. Hover the label for the reason.'
     },
-    headers: ['ID', 'From', 'To', 'Trigger', 'Guard', 'Time', 'Safety Goal', 'Reaches', ''],
-    gridCols: '90px 120px 120px 1fr 1fr 80px 160px 110px 40px',
+    headers: ['ID', 'From', 'To', 'Safety Goal', 'Time', 'Trigger', 'Guard', 'Reaches', ''],
+    gridCols: '90px 110px 110px 150px 75px 1fr 1fr 62px 36px',
     getList: doc => doc.modeTransitions,
     add: doc => {
         const t = new ModeTransition();
@@ -36,14 +36,17 @@ Declarations.register('modeTransition', {
     updateFromRow: (doc, id, row) => {
         const item = doc.modeTransitions.find(x => x.id === id);
         if (!item) return;
-        const selects = row.querySelectorAll('select');
+        // Selects are read by their data-tr attribute (order-proof);
+        // text inputs by DOM position — keep in sync with renderRow:
+        //   inputs[0]=Time, [1]=Trigger, [2]=Guard  (v1.5.7 column order).
         const inputs  = row.querySelectorAll('input[type="text"]');
-        item.fromMode       = selects[0].value;
-        item.toMode         = selects[1].value;
-        item.trigger        = inputs[0].value;
-        item.guard          = inputs[1].value;
-        item.transitionTime = inputs[2].value;
-        item.safetyGoalRef  = selects[2] ? selects[2].value : (item.safetyGoalRef || '');
+        const sel = k => row.querySelector(`select[data-tr="${k}"]`);
+        item.fromMode       = sel('from') ? sel('from').value : item.fromMode;
+        item.toMode         = sel('to')   ? sel('to').value   : item.toMode;
+        item.safetyGoalRef  = sel('sg')   ? sel('sg').value   : (item.safetyGoalRef || '');
+        item.transitionTime = inputs[0].value;
+        item.trigger        = inputs[1].value;
+        item.guard          = inputs[2].value;
         // "reaches a safe state" is derived from the target mode — not set here.
     },
     commitFromRow: (doc, id) => {
@@ -54,11 +57,11 @@ Declarations.register('modeTransition', {
         <div class="req-id" style="align-self:center;" title="Internal stable ID.">${item.id}</div>
         <select data-tr="from"></select>
         <select data-tr="to"></select>
-        <input type="text" list="lex-triggers" value="${(item.trigger||'').replace(/"/g,'&quot;')}" placeholder="e.g. ignition off">
-        <input type="text" value="${(item.guard||'').replace(/"/g,'&quot;')}" placeholder="optional precondition">
-        <input type="text" value="${(item.transitionTime||'').replace(/"/g,'&quot;')}" placeholder="100 ms">
         <select data-tr="sg" title="Safety Goal whose FTTI governs this transition (optional)."></select>
-        <span data-tr="reaches" style="align-self:center;font-size:11px;"></span>
+        <input type="text" value="${(item.transitionTime||'').replace(/"/g,'&quot;')}" placeholder="100 ms">
+        <input type="text" list="lex-triggers" value="${(item.trigger||'').replace(/"/g,'&quot;')}" placeholder="e.g. ignition off">
+        <input type="text" value="${(item.guard||'').replace(/"/g,'&quot;')}" placeholder="optional precondition (EARS: While …)">
+        <span data-tr="reaches" class="tr-reaches"></span>
         <button class="del-btn req-delete" title="Delete this transition">✕</button>
     `,
     postRender: (row, item, doc) => {
@@ -112,20 +115,24 @@ Declarations.register('modeTransition', {
             const toMode = (doc.modes || []).find(m => m.id === item.toMode);
             const realisesSS = toMode && ((doc.safeStates || []).some(s => (s.modeRefs || []).includes(toMode.id)));
             const safe = !!(toMode && (toMode.isSafeState || realisesSS));
+            const setState = (cls, text, title) => {
+                lbl.className = `tr-reaches ${cls}`;
+                lbl.textContent = text;
+                lbl.title = title;
+            };
             if (!toMode) {
-                lbl.textContent = item.toMode ? '⚠ orphaned' : '—';
-                lbl.style.color = item.toMode ? 'var(--amber)' : 'var(--text-dim)';
-                lbl.title = item.toMode
-                    ? `Target mode ${item.toMode} no longer exists — this transition is orphaned. Re-select a live target or delete the row.`
-                    : 'Set a target mode first.';
+                if (item.toMode) {
+                    setState('orphaned', '⚠',
+                        `Orphaned: target mode ${item.toMode} no longer exists. Re-select a live target or delete the row.`);
+                } else {
+                    setState('unset', '—', 'Set a target mode first.');
+                }
             } else if (safe) {
-                lbl.textContent = '⛟ safe state';
-                lbl.style.color = 'var(--green)';
-                lbl.title = `Reaches a safe state: target mode "${toMode.name || toMode.id}" is marked a safe state in Item Definition${realisesSS && !toMode.isSafeState ? ' (via a declared safe state)' : ''}. The Timing Analysis chapter derives its safe-state reaction requirement.`;
+                setState('safe', '⛟ safe',
+                    `Reaches a safe state: target mode "${toMode.name || toMode.id}" reads SAFE — ${toMode.isSafeState ? 'its "Safe state?" flag is ticked in Item Definition' : ''}${toMode.isSafeState && realisesSS ? ' and ' : ''}${realisesSS ? 'a declared Safe State lists it under "Modes"' : ''}. See the Mode safety readout in the diagnostics below for the per-mode picture. The Timing Analysis chapter derives its safe-state reaction requirement.`);
             } else {
-                lbl.textContent = 'operational';
-                lbl.style.color = 'var(--text-mid)';
-                lbl.title = `Not a safe-state transition: target mode "${toMode.name || toMode.id}" is not marked a safe state in Item Definition.`;
+                setState('operational', 'operational',
+                    `Not a safe-state transition: target mode "${toMode.name || toMode.id}" is neither flagged as a safe state in Item Definition nor listed under any Safe State's "Modes".`);
             }
         }
     }

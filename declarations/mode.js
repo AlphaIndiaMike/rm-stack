@@ -48,10 +48,31 @@ Declarations.register('mode', {
         <input type="text" value="${(item.name||'').replace(/"/g,'&quot;')}" placeholder="e.g. Nominal, Degraded, Safe">
         <input type="text" value="${(item.description||'').replace(/"/g,'&quot;')}" placeholder="What is true while in this mode?">
         <span class="ms-mount" data-ms="active-functions"></span>
-        <input type="checkbox" ${item.isSafeState ? 'checked' : ''} style="justify-self:center;" title="Designated safe state.">
+        <span style="justify-self:center;display:flex;align-items:center;gap:0.3rem;">
+            <input type="checkbox" ${item.isSafeState ? 'checked' : ''} title="Designated safe state.">
+            <span data-mode="effective" style="font-size:10px;"></span>
+        </span>
         <button class="del-btn req-delete" title="Delete this mode">✕</button>
     `,
     postRender: (row, item, doc, refresh) => {
+        // The checkbox edits the FLAG, but the mode's EFFECTIVE safety is
+        // the OR of this flag and SafeState.modeRefs (the Safe States
+        // table's "Modes" multiselect). When they differ, say so here —
+        // otherwise this row shows "operational" while every transition
+        // into the mode shows "safe state", with no visible cause.
+        const eff = row.querySelector('span[data-mode="effective"]');
+        if (eff) {
+            const realising = (doc.safeStates || [])
+                .filter(ss => (ss.modeRefs || []).includes(item.id));
+            if (!item.isSafeState && realising.length > 0) {
+                eff.textContent = '⛟ reads SAFE';
+                eff.style.color = 'var(--amber)';
+                eff.title = `This mode reads SAFE even though the flag is unticked, because Safe State ${realising.map(s => `"${s.description || s.id}"`).join(', ')} lists it under "Modes" (modes that realise that safe state). If this mode is operational, remove it there; if it genuinely realises the safe state, tick the flag so every view agrees.`;
+            } else {
+                eff.textContent = '';
+                eff.title = '';
+            }
+        }
         const mount = row.querySelector('.ms-mount[data-ms="active-functions"]');
         if (!mount) return;
         const fnOpts = doc.itemFunctions.map(f => ({
