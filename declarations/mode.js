@@ -28,7 +28,12 @@ Declarations.register('mode', {
         m.id = doc.nextId('mode');
         doc.modes.push(m);
     },
-    remove: (doc, id) => { doc.modes = doc.modes.filter(x => x.id !== id); },
+    remove: (doc, id) => {
+        doc.modes = doc.modes.filter(x => x.id !== id);
+        // Clear dead references and drop pure-stub transitions so deleting
+        // a mode never strands orphans (see SyrsDocument.cascadeModeRemoval).
+        doc.cascadeModeRemoval(id);
+    },
     updateFromRow: (doc, id, row) => {
         const item = doc.modes.find(x => x.id === id);
         if (!item) return;

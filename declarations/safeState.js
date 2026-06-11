@@ -26,7 +26,11 @@ Declarations.register('safeState', {
         ss.id = doc.nextId('safeState');
         doc.safeStates.push(ss);
     },
-    remove: (doc, id) => { doc.safeStates = doc.safeStates.filter(x => x.id !== id); },
+    remove: (doc, id) => {
+        doc.safeStates = doc.safeStates.filter(x => x.id !== id);
+        // Clear legacy SafetyGoal.safeStates references pointing at it.
+        doc.cascadeSafeStateRemoval(id);
+    },
     updateFromRow: (doc, id, row) => {
         const item = doc.safeStates.find(x => x.id === id);
         if (!item) return;

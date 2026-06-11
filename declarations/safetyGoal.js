@@ -22,7 +22,11 @@ Declarations.register('safetyGoal', {
         g.id = doc.nextId('safetyGoal');
         doc.safetyGoals.push(g);
     },
-    remove: (doc, id) => { doc.safetyGoals = doc.safetyGoals.filter(x => x.id !== id); },
+    remove: (doc, id) => {
+        doc.safetyGoals = doc.safetyGoals.filter(x => x.id !== id);
+        // Clear transition FTTI links and SafeState.sgRefs pointing at it.
+        doc.cascadeSafetyGoalRemoval(id);
+    },
     updateFromRow: (doc, id, row) => {
         const item = doc.safetyGoals.find(x => x.id === id);
         if (!item) return;

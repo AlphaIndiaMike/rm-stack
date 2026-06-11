@@ -1014,6 +1014,75 @@ class SyrsDocument {
     }
 
     /**
+     * Referential-integrity cascades.
+     *
+     * Deleting an entity must not strand references to it that the UI can
+     * no longer repair. The policy, in order of preference:
+     *   1. PRESERVE authored data — clear only the dead reference itself.
+     *   2. DELETE only pure stubs — rows that, after clearing, carry no
+     *      authored content at all (they hold no information worth keeping).
+     * The declaration `remove` hooks call these so orphans stop being
+     *      created at the source; pre-existing orphans (older saves) stay
+     *      visible and repairable in the row (see modeTransition postRender)
+     *      and are flagged by the validator.
+     */
+
+    /** Cascade for deleting a mode: clear dead transition endpoints, drop
+     *  the id from SafeState.modeRefs and ItemFunction.activeModes, then
+     *  delete transitions left as pure stubs. Returns a summary for tests
+     *  and (later) UI messaging. */
+    cascadeModeRemoval(modeId) {
+        const summary = { endpointsCleared: 0, stubsDeleted: 0, modeRefsCleaned: 0, activeModesCleaned: 0 };
+        this.modeTransitions.forEach(t => {
+            if (t.fromMode === modeId) { t.fromMode = ''; summary.endpointsCleared++; }
+            if (t.toMode   === modeId) { t.toMode   = ''; summary.endpointsCleared++; }
+        });
+        const isStub = t => !t.fromMode && !t.toMode && !(t.trigger || '').trim()
+            && !(t.guard || '').trim() && !(t.transitionTime || '').trim() && !t.safetyGoalRef;
+        const before = this.modeTransitions.length;
+        this.modeTransitions = this.modeTransitions.filter(t => !isStub(t));
+        summary.stubsDeleted = before - this.modeTransitions.length;
+        (this.safeStates || []).forEach(ss => {
+            const n = (ss.modeRefs || []).length;
+            ss.modeRefs = (ss.modeRefs || []).filter(id => id !== modeId);
+            summary.modeRefsCleaned += n - ss.modeRefs.length;
+        });
+        (this.itemFunctions || []).forEach(f => {
+            const n = (f.activeModes || []).length;
+            f.activeModes = (f.activeModes || []).filter(id => id !== modeId);
+            summary.activeModesCleaned += n - f.activeModes.length;
+        });
+        return summary;
+    }
+
+    /** Cascade for deleting a Safety Goal: clear transition FTTI links and
+     *  SafeState.sgRefs that point at it. */
+    cascadeSafetyGoalRemoval(sgId) {
+        const summary = { linksCleared: 0, sgRefsCleaned: 0 };
+        this.modeTransitions.forEach(t => {
+            if (t.safetyGoalRef === sgId) { t.safetyGoalRef = ''; summary.linksCleared++; }
+        });
+        (this.safeStates || []).forEach(ss => {
+            const n = (ss.sgRefs || []).length;
+            ss.sgRefs = (ss.sgRefs || []).filter(id => id !== sgId);
+            summary.sgRefsCleaned += n - ss.sgRefs.length;
+        });
+        return summary;
+    }
+
+    /** Cascade for deleting a SafeState: clear legacy SafetyGoal.safeStates
+     *  references that point at it. */
+    cascadeSafeStateRemoval(ssId) {
+        const summary = { safeStateRefsCleaned: 0 };
+        (this.safetyGoals || []).forEach(sg => {
+            const n = (sg.safeStates || []).length;
+            sg.safeStates = (sg.safeStates || []).filter(id => id !== ssId);
+            summary.safeStateRefsCleaned += n - sg.safeStates.length;
+        });
+        return summary;
+    }
+
+    /**
      * Mode ↔ Function helpers.
      *
      * The canonical store is `ItemFunction.activeModes` — a per-function

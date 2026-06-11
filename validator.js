@@ -395,6 +395,9 @@ class DocumentValidator {
 
     /**
      * Forgotten transitions in the mode graph. Flags:
+     *   - transitions referencing a deleted mode or Safety Goal (orphans
+     *     from saves predating deletion cascades; repairable in the row,
+     *     which shows the dead reference explicitly)
      *   - modes with no outbound transitions (terminal but not a safe state)
      *   - modes with no inbound transitions (unreachable)
      *   - safe states with no transition into any of their realizing modes
@@ -403,6 +406,21 @@ class DocumentValidator {
         const issues = [];
         const modes = this.doc.modes || [];
         const trans = this.doc.modeTransitions || [];
+        const modeIds = new Set(modes.map(m => m.id));
+        const sgIds   = new Set((this.doc.safetyGoals || []).map(g => g.id));
+        trans.forEach(t => {
+            const dead = [];
+            if (t.fromMode && !modeIds.has(t.fromMode)) dead.push(`source mode ${t.fromMode}`);
+            if (t.toMode   && !modeIds.has(t.toMode))   dead.push(`target mode ${t.toMode}`);
+            if (dead.length) {
+                issues.push({ kind: 'dead-mode-ref', tId: t.id,
+                    text: `Transition ${t.id} references a deleted ${dead.join(' and ')} — orphaned. In System Breakdown, re-select a live mode in the row (the dead reference is shown in amber) or delete the transition.` });
+            }
+            if (t.safetyGoalRef && !sgIds.has(t.safetyGoalRef)) {
+                issues.push({ kind: 'dead-sg-link', tId: t.id,
+                    text: `Transition ${t.id} links deleted Safety Goal ${t.safetyGoalRef} — no FTTI can govern it. Pick a live goal in the row or clear the link.` });
+            }
+        });
         modes.forEach(m => {
             const outbound = trans.filter(t => t.fromMode === m.id).length;
             const inbound  = trans.filter(t => t.toMode   === m.id).length;

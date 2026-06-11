@@ -835,7 +835,19 @@ body { overflow-x: auto; }
   background: var(--bg-elevated);
   color: var(--text);
   outline: none;
+  /* Long option labels (e.g. "Goal name · FTTI 100 ms") must not blow the
+     grid column open: clamp to the column and shrink the text the same way
+     .multiselect-btn / .ms-label do — fade the extra out into an ellipsis. */
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+/* A select option pointing at a deleted entity (orphaned reference kept
+   visible so the author can re-link or clear it — never silently lost). */
+.declaration-row select option.dead-ref,
+.declaration-row select.has-dead-ref { color: var(--amber); }
 .declaration-row input:focus,
 .declaration-row select:focus { border-color: var(--border-focus); background: var(--bg-panel); }
 

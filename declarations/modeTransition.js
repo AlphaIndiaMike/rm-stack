@@ -62,12 +62,24 @@ Declarations.register('modeTransition', {
         <button class="del-btn req-delete" title="Delete this transition">✕</button>
     `,
     postRender: (row, item, doc) => {
+        // A reference to a deleted entity is rendered as a visible, selected
+        // "deleted" option rather than silently falling back to "— select —"
+        // (which would also silently erase the ref on the next row edit).
+        // The author can then re-link to a live entity or clear it — the
+        // orphan is always fixable from this row, never only in the JSON.
         const fill = (sel, current) => {
             if (!sel) return;
             const opts = ['<option value="">— select —</option>']
                 .concat(doc.modes.map(m =>
                     `<option value="${m.id}" ${m.id === current ? 'selected' : ''}>${(m.name||m.id).replace(/"/g,'&quot;')}</option>`));
+            if (current && !doc.modes.some(m => m.id === current)) {
+                opts.push(`<option value="${current}" selected class="dead-ref">⚠ deleted mode (${current})</option>`);
+            }
             sel.innerHTML = opts.join('');
+            sel.classList.toggle('has-dead-ref', !!current && !doc.modes.some(m => m.id === current));
+            if (sel.classList.contains('has-dead-ref')) {
+                sel.title = 'This transition references a mode that no longer exists. Pick a live mode, or "— select —" to clear; stub transitions can be deleted with ✕.';
+            }
         };
         fill(row.querySelector('select[data-tr="from"]'), item.fromMode);
         fill(row.querySelector('select[data-tr="to"]'),   item.toMode);
@@ -83,7 +95,13 @@ Declarations.register('modeTransition', {
                     const label = `${(g.name || g.id)}${g.ftti ? ` · FTTI ${g.ftti}` : ' · no FTTI'}`;
                     return `<option value="${g.id}" ${g.id === item.safetyGoalRef ? 'selected' : ''}>${label.replace(/"/g,'&quot;')}</option>`;
                 }));
+            const sgDead = !!item.safetyGoalRef && !(doc.safetyGoals || []).some(g => g.id === item.safetyGoalRef);
+            if (sgDead) {
+                opts.push(`<option value="${item.safetyGoalRef}" selected class="dead-ref">⚠ deleted goal (${item.safetyGoalRef})</option>`);
+            }
             sgSel.innerHTML = opts.join('');
+            sgSel.classList.toggle('has-dead-ref', sgDead);
+            if (sgDead) sgSel.title = 'This transition links a Safety Goal that no longer exists — its FTTI cannot govern anything. Pick a live goal or "— none —".';
         }
 
         // Derived, read-only "reaches a safe state?" label. The target
@@ -95,9 +113,11 @@ Declarations.register('modeTransition', {
             const realisesSS = toMode && ((doc.safeStates || []).some(s => (s.modeRefs || []).includes(toMode.id)));
             const safe = !!(toMode && (toMode.isSafeState || realisesSS));
             if (!toMode) {
-                lbl.textContent = '—';
-                lbl.style.color = 'var(--text-dim)';
-                lbl.title = 'Set a target mode first.';
+                lbl.textContent = item.toMode ? '⚠ orphaned' : '—';
+                lbl.style.color = item.toMode ? 'var(--amber)' : 'var(--text-dim)';
+                lbl.title = item.toMode
+                    ? `Target mode ${item.toMode} no longer exists — this transition is orphaned. Re-select a live target or delete the row.`
+                    : 'Set a target mode first.';
             } else if (safe) {
                 lbl.textContent = '⛟ safe state';
                 lbl.style.color = 'var(--green)';
