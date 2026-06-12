@@ -20,7 +20,7 @@ class HwInputCoverage {
         const wrap = document.createElement('div');
         wrap.className = 'requirements-section';
         wrap.innerHTML = `<div class="section-title">HW Input Coverage — System requirements with a HW portion
-            <span class="help-icon" title="Combined parent layer: System acceptance (non-safety/QM) + System TSR (safety). Covered when >=1 HW requirement lists it under Parent System requirement(s). Safety parents also require >=1 derived HW requirement with the SAME ASIL/SIL — no decomposition at this hop.">?</span>
+            <span class="help-icon" title="Combined parent layer: System acceptance (non-safety/QM) + System TSR (safety). Covered when >=1 HW requirement lists it under Parent System requirement(s). Safety parents also require >=1 derived HW requirement at SUFFICIENT integrity (equal or higher on the project's SIL↔ASIL ladder; e.g. SIL-2 satisfies ASIL-B, not ASIL-C). A lower level is shown as a WARNING — legitimate only as deliberate ISO 26262-9 decomposition. Cross-standard satisfaction carries an info note (ℹ).">?</span>
         </div>`;
 
         const validator = new DocumentValidator(this.doc);
@@ -65,7 +65,8 @@ class HwInputCoverage {
         cov.forEach(c => {
             let status, color;
             if (c.state === 'gap')               { status = '✗ nothing derived';            color = 'var(--red)'; }
-            else if (c.state === 'integrityGap') { status = `✗ no HW req at ${c.asil}`;      color = 'var(--red)'; }
+            else if (c.state === 'integrityGap') { status = `⚠ insufficient integrity (need ≥ ${c.asil})`; color = 'var(--amber)'; }
+            else if (c.state === 'covered' && c.integrityInfo) { status = `✓ ${c.derivedCount} HW req(s) ℹ`; color = 'var(--green)'; }
             else if (c.state === 'advisory')     { status = '⚠ allocation not set';          color = 'var(--amber)'; }
             else if (c.state === 'covered')      { status = `✓ ${c.derivedCount} HW req(s)`; color = 'var(--green)'; }
             else                                 { status = '— no HW portion';               color = '#999'; }
@@ -78,7 +79,7 @@ class HwInputCoverage {
                 <div>${c.asil}</div>
                 <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${c.statement.replace(/"/g,'&quot;')}">${c.statement}</div>
                 <div>${c.derivedCount}</div>
-                <div style="color:${color};" title="${status.replace(/"/g,'&quot;')}">${status}</div>
+                <div style="color:${color};" title="${(c.integrityInfo ? status + ' — ' + c.integrityInfo : status).replace(/"/g,'&quot;')}">${status}</div>
             `;
             table.appendChild(row);
         });
@@ -231,13 +232,13 @@ Chapters.register('hardware', {
     number: '2',
     title: 'HW Requirements Inputs',
     order: 20,
-    intro: 'Auto-generated. Coverage of every System requirement with a HW portion — acceptance (non-safety) and TSR (safety) together. Safety parents must have a derived HW requirement at the same ASIL/SIL.',
+    intro: 'Auto-generated. Coverage of every System requirement with a HW portion — acceptance (non-safety) and TSR (safety) together. Safety parents must have a derived HW requirement at sufficient integrity (equal or higher on the project's SIL↔ASIL ladder); lower levels are warned as decomposition.',
     allowsRequirements: false,
     subjectMode: 'none',
     extraWidgets: (doc, onChange) => [new HwInputCoverage(doc), new HwTakeoverGenerator(doc, onChange)],
     checklist: [
         { id: 'hi1', text: 'Every System requirement with a HW portion has ≥1 derived HW requirement (safety and non-safety).' },
-        { id: 'hi2', text: 'Every safety-classified System parent has ≥1 derived HW requirement carrying the SAME integrity.',
+        { id: 'hi2', text: 'Every safety-classified System parent has ≥1 derived HW requirement at sufficient integrity (equal or higher; deliberate decompositions reviewed).',
           help: 'No ASIL/SIL decomposition at the System→HW hop.' },
         { id: 'hi3', text: 'No System requirement relevant to HW is left with allocation unset.' }
     ]

@@ -18,10 +18,11 @@ Declarations.register('element', {
         'Purpose': 'One-sentence statement of why the element exists in the architecture.',
         'Parent':  'Optional. Parent element in the system breakdown. Self and descendants are excluded from the dropdown to prevent cycles.',
         'Qty':     'Number of identical instances of this element (e.g. 4 wheel-speed sensors). Right-pane Elements count sums these.',
+        'Implements': 'Multi-select. The Item Function(s) this element realizes (Element.allocatedItemFunctions). Feeds the "Implements" column of the Element Coverage Diagnostic and checklist c6d (no orphan elements).',
         'ASIL':    'Inherited or decomposed ASIL.'
     },
-    headers: ['ID', 'Name', 'Purpose', 'Parent', 'Qty', 'ASIL', ''],
-    gridCols: '90px 1fr 1fr 160px 60px 80px 40px',
+    headers: ['ID', 'Name', 'Purpose', 'Parent', 'Qty', 'Implements', 'ASIL', ''],
+    gridCols: '90px 1fr 1fr 150px 55px 150px 80px 40px',
     // Tree-ordered list with transient _depth on each item so renderRow
     // can indent the name. The componentKind filter keeps system rows
     // out of HW/SW chapters and vice versa.
@@ -59,11 +60,26 @@ Declarations.register('element', {
             <input type="text" value="${(item.purpose||'').replace(/"/g,'&quot;')}" placeholder="One-sentence purpose">
             <select data-elem="parent" title="Parent element in the breakdown."></select>
             <input type="number" min="1" step="1" value="${item.quantity || 1}" title="Number of identical instances.">
+            <span class="ms-mount" data-ms="implements"></span>
             <select title="Inherited or decomposed ASIL.">${GRAMMAR.asilLevels.map(a=>`<option ${item.asil===a?'selected':''}>${a}</option>`).join('')}</select>
             <button class="del-btn req-delete" title="Delete this element">✕</button>
         `;
     },
     postRender: (row, item, doc) => {
+        // "Implements" — the Item Functions this element realizes. This
+        // was stored on the model and counted by the Element Coverage
+        // Diagnostic (and demanded by checklist c6d) but, until v1.6.1,
+        // editable NOWHERE — an unfulfillable flag. Same multiselect
+        // pattern as the mode row's active functions.
+        const mount = row.querySelector('.ms-mount[data-ms="implements"]');
+        if (mount) {
+            const ms = new MultiSelectDropdown(
+                (doc.itemFunctions || []).map(f => ({ value: f.id, label: f.name || f.id })),
+                item.allocatedItemFunctions || [],
+                newRefs => { item.allocatedItemFunctions = newRefs; },
+                { unitLabel: 'function', emptyLabel: '(no item functions declared yet)' });
+            mount.replaceWith(ms.element);
+        }
         const sel = row.querySelector('select[data-elem="parent"]');
         if (!sel) return;
         const blocked = doc.descendantsOf(item.id);

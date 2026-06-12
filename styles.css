@@ -530,7 +530,13 @@ body { overflow-x: auto; }
   margin-bottom: 0.45rem;
   padding-bottom: 0.25rem;
   border-bottom: 1px solid var(--border);
+  /* flex so a section can right-align an action (e.g. ⟳ Refresh on the
+     generator sections, v1.6.3) without a layout wrapper. */
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
 }
+.section-title .btn-add { margin-left: auto; }
 
 .checklist-section,
 .requirements-section { margin-bottom: 1.75rem; }
@@ -849,6 +855,12 @@ body { overflow-x: auto; }
 .declaration-row select option.dead-ref,
 .declaration-row select.has-dead-ref { color: var(--amber); }
 /* Derived "Reaches" label on mode-transition rows — one class per state. */
+/* Shared select truncation (v1.6.3) — same fade-out pattern as
+   .declaration-row select, for selects living outside declaration rows
+   (Timing chains, HSI mapping). */
+select.select-truncate { min-width: 0; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .tr-reaches { align-self: center; font-size: 11px; white-space: nowrap; }
 .tr-reaches.safe        { color: var(--green); }
 .tr-reaches.operational { color: var(--red); font-weight: 600; }

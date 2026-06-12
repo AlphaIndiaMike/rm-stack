@@ -134,6 +134,21 @@ class Requirement {
         this.clause = data.clause || '';
         this.prohibitedBehavior = data.prohibitedBehavior || '';
         this.boundingCondition = data.boundingCondition || '';
+        // v1.6.0 predicate fields: limit / maintain / indicate / transmit / store
+        this.limitedQuantity      = data.limitedQuantity || '';
+        this.limitBound           = data.limitBound || '';
+        this.maintainedQuantity   = data.maintainedQuantity || '';
+        this.setpoint             = data.setpoint || '';
+        this.setpointTolerance    = data.setpointTolerance || '';
+        this.information          = data.information || '';
+        this.recipient            = data.recipient || '';
+        this.indicationLatency    = data.indicationLatency || '';
+        this.message              = data.message || '';
+        this.channel              = data.channel || '';
+        this.transmitTiming       = data.transmitTiming || '';
+        this.dataStored           = data.dataStored || '';
+        this.storageMedium        = data.storageMedium || '';
+        this.persistenceCondition = data.persistenceCondition || '';
         // 'interface' predicate fields (HSI signal-definition requirements)
         this.signalName       = data.signalName || '';
         this.pin              = data.pin || '';
@@ -1250,7 +1265,21 @@ class SyrsDocument {
      */
     declaredSubjectsForChapter(chapter) {
         if (!chapter) return [];
-        if (chapter.subjectMode === 'system') return ['the system'];
+        if (chapter.subjectMode === 'system') {
+            // An autoExpand chapter (the TSR chapter) authors at TWO
+            // levels: overall requirements at the root ("the system")
+            // AND element-specific TSRs in the per-element sub-chapters
+            // (subject = element name). Both must validate — v1.6.1
+            // returned only ['the system'] here, which made every
+            // existing element-subject TSR fail with "not a declared
+            // element or function".
+            if (chapter.autoExpand === 'elements') {
+                return ['the system',
+                    ...this.elementsForDiscipline(this.discipline)
+                        .map(e => e.name).filter(Boolean)];
+            }
+            return ['the system'];
+        }
         // FSC: an FSR is allocated to the item ("the system"), to an
         // external measure, or to an assumed driver/operator action. The
         // subject list is the declared Safety Actors plus "the system",

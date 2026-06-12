@@ -266,6 +266,7 @@ class TimingChainBuilder {
         ctl.appendChild(idBadge);
 
         const trSel = document.createElement('select');
+        trSel.classList.add('select-truncate');
         trSel.style.maxWidth = '320px';
         const def = document.createElement('option');
         def.value = ''; def.textContent = '— mode transition —';
@@ -346,6 +347,7 @@ class TimingChainBuilder {
         row.style.cssText = 'display:flex;gap:0.5rem;align-items:flex-end;flex-wrap:wrap;padding:0.3rem 0 0.3rem;border-top:1px solid var(--border);';
 
         const kindSel = document.createElement('select');
+        kindSel.classList.add('select-truncate');
         [['externalIf', 'External signal'], ['element', 'Element'], ['internalIf', 'Internal interface']].forEach(([v, l]) => {
             const o = document.createElement('option'); o.value = v; o.textContent = l;
             if (seg.kind === v) o.selected = true; kindSel.appendChild(o);
@@ -353,6 +355,7 @@ class TimingChainBuilder {
         kindSel.addEventListener('change', () => { seg.kind = kindSel.value; seg.refId = ''; this.onChange(); });
 
         const refSel = document.createElement('select');
+        refSel.classList.add('select-truncate');
         [{ value: '', label: '— reference —' }].concat(tmRefOptions(this.doc, seg.kind)).forEach(o => {
             const opt = document.createElement('option'); opt.value = o.value; opt.textContent = o.label;
             if (seg.refId === o.value) opt.selected = true; refSel.appendChild(opt);
@@ -419,10 +422,14 @@ class TimingDiagnostic {
             ul.className = 'summary-list';
             results.forEach(r => {
                 let txt, cls;
-                if (r.status === 'no-transition')   { txt = `${r.name}: not anchored to a mode transition.`; cls = 'warn'; }
-                else if (r.status === 'no-budget')  { txt = `${r.name}: transition has no time budget and no governing FTTI.`; cls = 'warn'; }
-                else if (r.status === 'incomplete') { txt = `${r.name}: ${r.missingBudgets} hop(s) still need a budget (Σ ${Timing.formatMs(r.sumMs) || '0 ms'} so far).`; cls = 'warn'; }
-                else if (r.status === 'over')       { txt = `${r.name}: Σ ${Timing.formatMs(r.sumMs)} exceeds ${Timing.formatMs(r.budgetMs)} (${r.budgetSource}).`; cls = 'error'; }
+                // Every line identifies the chain AND its anchored
+                // transition (ID + FROM → TO), so the user can find the
+                // right row without decoding IDs (v1.6.3).
+                const who = r.trLabel ? `${r.name} — transition ${r.trLabel}` : r.name;
+                if (r.status === 'no-transition')   { txt = `${r.name}: not anchored to a mode transition — pick one in the chain's "Mode transition" dropdown.`; cls = 'warn'; }
+                else if (r.status === 'no-budget')  { txt = `${who}: the transition has no time budget and no governing FTTI.`; cls = 'warn'; }
+                else if (r.status === 'incomplete') { txt = `${who}: ${r.missingBudgets} hop(s) still need a budget (Σ ${Timing.formatMs(r.sumMs) || '0 ms'} so far).`; cls = 'warn'; }
+                else if (r.status === 'over')       { txt = `${who}: Σ ${Timing.formatMs(r.sumMs)} exceeds ${Timing.formatMs(r.budgetMs)} (${r.budgetSource}).`; cls = 'error'; }
                 else                                { txt = `${r.name}: Σ ${Timing.formatMs(r.sumMs)} within ${Timing.formatMs(r.budgetMs)} (${r.budgetSource}). ✓`; cls = 'ok'; }
                 if (r.dangling > 0) txt += ` · ${r.dangling} dangling reference(s).`;
                 const li = document.createElement('li');
@@ -718,9 +725,22 @@ class ChainRequirementGenerator {
     render(container) {
         const wrap = document.createElement('div');
         wrap.className = 'requirements-section';
+        this._renderBody(wrap);
+        container.appendChild(wrap);
+    }
+
+    /** Body render, separated so the ⟳ Refresh button can re-read the
+     *  chains/reactions state above WITHOUT relying on the editor's
+     *  event chain (v1.6.3 — same pattern as the HSI generator). The doc
+     *  object is shared and mutated in place by the sections above, so a
+     *  re-read is always current. */
+    _renderBody(wrap) {
         wrap.innerHTML = `<div class="section-title">Generate Requirements
             <span class="help-icon" title="One click generates everything: per timing chain — the transition acceptance requirement (Chapter 4) and a process TSR per element hop (Chapter 6); per safe-state transition that has a detecting element assigned above — the detect-and-react safety-mechanism TSR (Chapter 6), with no chain required. Re-clicking is safe; existing requirements are skipped.">?</span>
+            <button class="btn-add" style="font-size:11px;" title="Re-read the chains and safe-state reactions above and recompute what can be generated.">⟳ Refresh</button>
         </div>`;
+        wrap.querySelector('.section-title button').addEventListener('click',
+            () => this._renderBody(wrap));
 
         const chainsReady = (this.doc.timingChains || []).filter(c => this._ready(c)).length;
         const reactionsReady = this._reactionsReady();
@@ -753,7 +773,6 @@ class ChainRequirementGenerator {
                 status.textContent = `Added ${n} requirement(s): transition acceptance requirements → Chapter 4, element process TSRs and safe-state detect-and-react TSRs → Chapter 6. Open those chapters to refine attributes.`;
             }
         });
-        container.appendChild(wrap);
     }
 }
 

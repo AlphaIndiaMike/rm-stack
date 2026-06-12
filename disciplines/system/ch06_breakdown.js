@@ -425,7 +425,11 @@ Chapters.register('system', {
     intro: 'Elements declared here. Chapter 6 is auto-generated from this list. The mode simulator below lets you walk the state machine you defined in the Mode Transitions table.',
     allowsRequirements: false,
     subjectMode: 'none',
-    declarations: ['element', 'interface', 'modeTransition'],
+    // 'internalInterface' (v1.6.4): the table existed since the timing
+    // feature but was mounted in NO chapter — internal interfaces were
+    // selectable in HSI mapping and walkable by timing chains, yet
+    // declarable nowhere. It lives here next to External Interfaces.
+    declarations: ['element', 'interface', 'internalInterface', 'modeTransition'],
     extraWidgets: (doc, onChange) => [
         new ModeDiagnosticsView(doc),
         new ModeSimulatorView(doc),

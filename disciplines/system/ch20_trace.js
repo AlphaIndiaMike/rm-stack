@@ -16,7 +16,7 @@ class TraceabilityReport {
         const wrap = document.createElement('div');
         wrap.className = 'requirements-section';
         wrap.innerHTML = `<div class="section-title">Trace Matrix (auto-generated)
-            <span class="help-icon" title="Built from structured parent fields on every requirement: parentSG, parentFsrs, parentAcceptanceReqs, parentItemFunctions, allocation. Edit a requirement to change a trace.">?</span>
+            <span class="help-icon" title="Built automatically from the parent links on every requirement: parent Safety Goal, parent FSR(s), parent acceptance requirement(s), item function(s), and HW/SW allocation. Edit a requirement's parent fields to change a trace.">?</span>
         </div>`;
 
         const validator = new DocumentValidator(this.doc);

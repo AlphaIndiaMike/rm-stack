@@ -25,7 +25,7 @@ class SwInputCoverage {
         const wrap = document.createElement('div');
         wrap.className = 'requirements-section';
         wrap.innerHTML = `<div class="section-title">SW Input Coverage — System requirements with a SW portion
-            <span class="help-icon" title="Combined parent layer: System acceptance (black-box, where QM/non-safety parents live) + System TSR (white-box, safety parents). A row is covered when >=1 SW requirement lists it under Parent System requirement(s). Safety parents (ASIL/SIL) also require >=1 derived SW requirement with the SAME integrity — no decomposition at this hop.">?</span>
+            <span class="help-icon" title="Combined parent layer: System acceptance (black-box, where QM/non-safety parents live) + System TSR (white-box, safety parents). A row is covered when >=1 SW requirement lists it under Parent System requirement(s). Safety parents (ASIL/SIL) also require >=1 derived SW requirement at SUFFICIENT integrity (equal or higher on the project's SIL↔ASIL ladder; e.g. SIL-2 satisfies ASIL-B, not ASIL-C). A lower level is shown as a WARNING — legitimate only as deliberate ISO 26262-9 decomposition. Cross-standard satisfaction carries an info note (ℹ).">?</span>
         </div>`;
 
         const validator = new DocumentValidator(this.doc);
@@ -70,7 +70,8 @@ class SwInputCoverage {
         cov.forEach(c => {
             let status, color;
             if (c.state === 'gap')               { status = '✗ nothing derived';                 color = 'var(--red)'; }
-            else if (c.state === 'integrityGap') { status = `✗ no SW req at ${c.asil}`;           color = 'var(--red)'; }
+            else if (c.state === 'integrityGap') { status = `⚠ insufficient integrity (need ≥ ${c.asil})`; color = 'var(--amber)'; }
+            else if (c.state === 'covered' && c.integrityInfo) { status = `✓ ${c.derivedCount} SW req(s) ℹ`; color = 'var(--green)'; }
             else if (c.state === 'advisory')     { status = '⚠ allocation not set';               color = 'var(--amber)'; }
             else if (c.state === 'covered')      { status = `✓ ${c.derivedCount} SW req(s)`;      color = 'var(--green)'; }
             else                                 { status = '— no SW portion';                    color = '#999'; }
@@ -83,7 +84,7 @@ class SwInputCoverage {
                 <div>${c.asil}</div>
                 <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${c.statement.replace(/"/g,'&quot;')}">${c.statement}</div>
                 <div>${c.derivedCount}</div>
-                <div style="color:${color};" title="${status.replace(/"/g,'&quot;')}">${status}</div>
+                <div style="color:${color};" title="${(c.integrityInfo ? status + ' — ' + c.integrityInfo : status).replace(/"/g,'&quot;')}">${status}</div>
             `;
             table.appendChild(row);
         });

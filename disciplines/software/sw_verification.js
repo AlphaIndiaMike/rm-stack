@@ -72,10 +72,18 @@ class SwTraceStatusReport {
                 .filter(p => p && (p.asil || '').trim() &&
                              (p.asil || '').trim() !== 'QM');
             if (safetyParents.length) {
-                const ok = safetyParents.some(p => (p.asil || '').trim() === lvl);
+                // Rank-based (v1.5.9): equal-or-higher satisfies, SIL<->ASIL
+                // via the project ladder (info), below-parent is a WARNING
+                // (deliberate ISO 26262-9 decomposition only).
+                const sats = safetyParents.map(p => GRAMMAR.integritySatisfies(lvl, (p.asil || '').trim()));
+                const ok = sats.some(s => s.ok);
+                const onlyCross = ok && !sats.some(s => s.ok && !s.crossFamily);
+                const ceiling = !ok && sats.some(s => s.crossCeiling);
                 intHtml = ok
-                    ? `<span style="color:var(--green);font-weight:600;">✓ ${lvl || 'QM'}</span>`
-                    : `<span style="color:var(--red);font-weight:600;">✗ ${lvl || 'QM'} ≠ parent</span>`;
+                    ? `<span style="color:var(--green);font-weight:600;" title="${onlyCross ? 'Satisfied via the project\'s SIL\u2194ASIL equivalence convention (no normative mapping exists between the standards).' : 'Integrity sufficient.'}">✓ ${lvl || 'QM'}${onlyCross ? ' \u2139' : ''}</span>`
+                    : ceiling
+                        ? `<span style="color:var(--red);font-weight:600;" title="ASIL does not satisfy SIL-4: IEC 61508 SIL-4 exceeds the automotive ASIL range (literature places ASIL-D ≈ SIL-3). The safety case is incomplete at this rung — no decomposition fixes a cross-standard ceiling.">✗ ${lvl || 'QM'} < SIL-4</span>`
+                        : `<span style="color:var(--amber);font-weight:600;" title="Below the parent's integrity — insufficient downtrace unless this is a deliberate ISO 26262-9 decomposition.">⚠ ${lvl || 'QM'} < parent</span>`;
             }
             const row = document.createElement('div');
             row.style.cssText = `display:grid;grid-template-columns:${cols};gap:0.4rem;padding:0.5rem 0.75rem;font-size:13px;border-bottom:1px solid var(--border);align-items:center;`;

@@ -176,6 +176,92 @@ const GRAMMAR = {
             ]
         },
         {
+            // Abstraction: any level. The bounding verb — the requirement
+            // IS the bound, so SMART measurability is forced by the
+            // template: a quantity and a numeric bound are both required.
+            // "While reverse gear is engaged, the system shall limit
+            // vehicle speed to ≤ 10 km/h."
+            id: 'limit',
+            label: 'Limit quantity to bound',
+            verb: 'limit',
+            kind: 'functional',
+            template: '[limitedQuantity] to [limitBound]',
+            fields: [
+                { id: 'limitedQuantity', label: 'Quantity limited', required: true, hint: 'e.g. vehicle speed, output current, message rate' },
+                { id: 'limitBound',      label: 'Bound',            required: true, hint: 'e.g. ≤ 10 km/h, ≤ 2 A — the bound IS the pass criterion' }
+            ]
+        },
+        {
+            // Abstraction: System / SW. Closed-loop holding of a setpoint
+            // — absorbs "control/regulate" (vague without a setpoint).
+            // Naturally EARS state-driven: pair with a While guard.
+            // "While ACC is active, the system shall maintain headway
+            // time at 1.8 s ± 0.2 s."
+            id: 'maintain',
+            label: 'Maintain quantity at setpoint',
+            verb: 'maintain',
+            kind: 'functional',
+            template: '[maintainedQuantity] at [setpoint] [setpointTolerance]',
+            fields: [
+                { id: 'maintainedQuantity', label: 'Quantity maintained', required: true, hint: 'e.g. headway time, rail voltage' },
+                { id: 'setpoint',           label: 'Setpoint',            required: true, hint: 'e.g. 1.8 s, 5.0 V' },
+                { id: 'setpointTolerance',  label: 'Tolerance',           required: true, hint: 'e.g. ± 0.2 s — makes the hold testable' }
+            ]
+        },
+        {
+            // Abstraction: Item (driver/operator information), also
+            // System. One piece of information, one recipient, one
+            // deadline — atomic by template. "If the lane-keeping
+            // function becomes unavailable, the item shall indicate the
+            // unavailability to the driver within 500 ms."
+            id: 'indicate',
+            label: 'Indicate information to recipient',
+            verb: 'indicate',
+            kind: 'functional',
+            template: '[information] to [recipient] within [indicationLatency]',
+            fields: [
+                { id: 'information',       label: 'Information indicated', required: true, hint: 'one piece of information — split "and" into separate requirements' },
+                { id: 'recipient',          label: 'Recipient',             required: true, hint: 'e.g. the driver, the operator, the diagnostic tester' },
+                { id: 'indicationLatency',  label: 'Latency',               required: false, hint: 'e.g. within 500 ms of the condition' }
+            ]
+        },
+        {
+            // Abstraction: HW / SW. Runtime communication behaviour,
+            // observable on the wire — distinct from the static
+            // 'interface' signal declaration. "the software unit shall
+            // transmit the wheel-speed message on CAN-1 every 10 ms."
+            // NOTE: there is deliberately no 'receive' counterpart —
+            // reception is not externally observable; specify what the
+            // subject DOES with the data (compute/process) or how it
+            // reacts to its absence (detect).
+            id: 'transmit',
+            label: 'Transmit message on channel',
+            verb: 'transmit',
+            kind: 'functional',
+            template: '[message] on [channel] [transmitTiming]',
+            fields: [
+                { id: 'message',        label: 'Message / signal', required: true, hint: 'e.g. the wheel-speed message' },
+                { id: 'channel',        label: 'Channel',          required: true, hint: 'e.g. CAN-1, SPI, the diagnostic interface' },
+                { id: 'transmitTiming', label: 'Timing',           required: true, hint: 'e.g. every 10 ms, within 5 ms of computation' }
+            ]
+        },
+        {
+            // Abstraction: HW / SW. Persistence — testable by cycling
+            // the persistence condition and reading back. "When a DTC is
+            // confirmed, the software unit shall store the freeze-frame
+            // in NvM retaining across power cycles."
+            id: 'store',
+            label: 'Store data with persistence',
+            verb: 'store',
+            kind: 'functional',
+            template: '[dataStored] in [storageMedium] retaining across [persistenceCondition]',
+            fields: [
+                { id: 'dataStored',           label: 'Data stored',    required: true, hint: 'e.g. the freeze-frame, the calibration set' },
+                { id: 'storageMedium',        label: 'Medium',         required: true, hint: 'e.g. NvM, EEPROM' },
+                { id: 'persistenceCondition', label: 'Retained across', required: false, hint: 'e.g. power cycles, software update' }
+            ]
+        },
+        {
             id: 'prohibit',
             label: 'Not (prohibition)',
             verb: 'not',
@@ -216,7 +302,16 @@ const GRAMMAR = {
         { word: 'TBD',          reason: 'Unresolved. Close before signoff.' },
         { word: 'TBC',          reason: 'Unresolved. Close before signoff.' },
         { word: 'as needed',    reason: 'Not specified. Give a condition.' },
-        { word: 'as required',  reason: 'Not specified. Give a condition.' }
+        { word: 'as required',  reason: 'Not specified. Give a condition.' },
+        // Unobservable-activity verbs (v1.6.0): the object is internal
+        // activity, not an observable effect — structurally untestable.
+        { scope: 'statement', word: 'monitor',      reason: 'Not testable as such — monitoring has no pass criterion. Specify the observable outcome: use "detect" (condition + reaction + time) or "indicate" (information + recipient).' },
+        { scope: 'statement', word: 'receive',      reason: 'Reception is not externally observable. Specify what the subject DOES with the data (compute/process) or how it reacts to its absence (detect timeout).' },
+        { scope: 'statement', word: 'manage',       reason: 'Not testable — names internal activity, not an observable effect. State the observable behavior.' },
+        { scope: 'statement', word: 'handle',       reason: 'Not testable — names internal activity. State the observable behavior (detect / limit / transition / indicate).' },
+        { scope: 'statement', word: 'support',      reason: 'Not testable. State the concrete capability (provide) or behavior.' },
+        { scope: 'statement', word: 'ensure',       reason: 'Not testable as such. State the property directly as the requirement.' },
+        { scope: 'statement', word: 'be able to',   reason: 'Capability hedging. State the behavior itself: the subject SHALL do it.' }
     ],
 
     // Integrity levels.
@@ -232,6 +327,86 @@ const GRAMMAR = {
     asilLevels: ['QM',
                  'ASIL-A', 'ASIL-B', 'ASIL-C', 'ASIL-D',
                  'SIL-1',  'SIL-2',  'SIL-3',  'SIL-4'],
+
+    /** Per-discipline vocabulary (v1.5.9). EARS/SMART are level-agnostic —
+     *  the PATTERN is valid at every abstraction level — but the
+     *  vocabulary should not be: the subject names the thing under
+     *  specification at THAT level, and some predicates fit one level
+     *  better than another (Item speaks black-box, SW speaks white-box).
+     *  This is guidance, not prohibition: preferred predicates sort
+     *  first in the editor and carry a recommendation tag; nothing is
+     *  forbidden, so cross-level data stays editable. */
+    disciplineVocabulary: {
+        item: {
+            subject: 'the item',
+            subjectHint: 'Concept level: name the item or the actor (e.g. "the item", "the driver").',
+            preferredPredicates: ['provide', 'detect', 'indicate', 'prohibit', 'transition', 'limit']
+        },
+        system: {
+            subject: 'the system',
+            subjectHint: 'System level: "the system", or the element for white-box TSRs.',
+            preferredPredicates: ['compute', 'limit', 'maintain', 'detect', 'transition', 'prohibit']
+        },
+        hardware: {
+            subject: 'the component',
+            subjectHint: 'HW level: name the component (e.g. "the ADC interface", "the watchdog").',
+            preferredPredicates: ['transform', 'limit', 'exhibit', 'interface', 'transmit', 'detect']
+        },
+        software: {
+            subject: 'the software unit',
+            subjectHint: 'SW level: name the unit/component (e.g. "the input handler", "the scheduler").',
+            preferredPredicates: ['process', 'transform', 'store', 'transmit', 'limit', 'maintain']
+        }
+    },
+
+    /** Integrity equivalence ladder (v1.5.9). PROJECT CONVENTION, not a
+     *  normative mapping: IEC 61508 and ISO 26262 define no official
+     *  correspondence (literature most often cites ASIL-D ≈ SIL-3, with
+     *  SIL-4 above anything automotive). This project declares the
+     *  monotone 1:1 ladder below; every cross-family acceptance is
+     *  surfaced to the user as a non-blocking info note so the
+     *  implication (e.g. ASIL HW-metric requirements that SIL does not
+     *  mirror) stays visible. */
+    integrityRank: { 'QM': 0,
+        'ASIL-A': 1, 'ASIL-B': 2, 'ASIL-C': 3, 'ASIL-D': 4,
+        'SIL-1':  1, 'SIL-2':  2, 'SIL-3':  3, 'SIL-4':  4 },
+
+    integrityFamily(level) {
+        const l = String(level || '').trim();
+        if (/^ASIL-/.test(l)) return 'asil';
+        if (/^SIL-/.test(l))  return 'sil';
+        return 'qm';
+    },
+
+    /** Does a child integrity level satisfy a parent's?
+     *  Returns { ok, crossFamily, decomposed }:
+     *    ok          child rank >= parent rank (SIL-2 satisfies ASIL-B,
+     *                not ASIL-C; a higher child always satisfies)
+     *    crossFamily ok via the SIL<->ASIL convention — show the
+     *                non-blocking info note
+     *    decomposed  child rank < parent rank — insufficient downtrace
+     *                (a WARNING: legitimate under ISO 26262-9
+     *                decomposition, but the user must have done it
+     *                deliberately) */
+    integritySatisfies(childLevel, parentLevel) {
+        const c = String(childLevel || '').trim(), p = String(parentLevel || '').trim();
+        const cr = this.integrityRank[c], pr = this.integrityRank[p];
+        if (pr == null || cr == null) return { ok: false, crossFamily: false, decomposed: false, crossCeiling: false };
+        // Cross-standard ceiling (v1.6.1): toward a SIL parent, an ASIL
+        // child's effective rank caps at 3 — literature places ASIL-D at
+        // ~SIL-3, and SIL-4 sits ABOVE the automotive range. So ASIL-D
+        // does NOT satisfy SIL-4 (and no decomposition can fix that —
+        // it is a different standard's ceiling, not a rank shortfall),
+        // while ASIL-D under SIL-3 still satisfies (with the info note).
+        const effective = (this.integrityFamily(p) === 'sil' &&
+                           this.integrityFamily(c) === 'asil')
+            ? Math.min(cr, 3) : cr;
+        const ok = effective >= pr;
+        const crossCeiling = !ok && cr >= pr;   // raw rank reached, ceiling blocked it
+        const crossFamily = ok && pr > 0 &&
+            this.integrityFamily(c) !== this.integrityFamily(p);
+        return { ok, crossFamily, decomposed: !ok && !crossCeiling, crossCeiling };
+    },
 
     /**
      * Map a stored level value to a CSS modifier class for the badge.
@@ -379,6 +554,25 @@ class GrammarValidator {
                 body = `not ${req.prohibitedBehavior || '[prohibited behavior]'}`;
                 if (req.boundingCondition) body += ` ${req.boundingCondition}`;
                 break;
+            case 'limit':
+                body = `limit ${req.limitedQuantity || '[quantity]'} to ${req.limitBound || '[bound]'}`;
+                break;
+            case 'maintain':
+                body = `maintain ${req.maintainedQuantity || '[quantity]'} at ${req.setpoint || '[setpoint]'}`;
+                if (req.setpointTolerance) body += ` ${req.setpointTolerance}`;
+                break;
+            case 'indicate':
+                body = `indicate ${req.information || '[information]'} to ${req.recipient || '[recipient]'}`;
+                if (req.indicationLatency) body += ` within ${req.indicationLatency.replace(/^within\s+/i, '')}`;
+                break;
+            case 'transmit':
+                body = `transmit ${req.message || '[message]'} on ${req.channel || '[channel]'}`;
+                if (req.transmitTiming) body += ` ${req.transmitTiming}`;
+                break;
+            case 'store':
+                body = `store ${req.dataStored || '[data]'} in ${req.storageMedium || '[medium]'}`;
+                if (req.persistenceCondition) body += ` retaining across ${req.persistenceCondition.replace(/^retaining across\s+/i, '')}`;
+                break;
         }
 
         // When the sentence has no conditional prefix the subject leads
@@ -441,13 +635,42 @@ class GrammarValidator {
             req.envelope, req.condition, req.reaction, req.trigger,
             req.property, req.value, req.tolerance, req.standard, req.clause,
             req.prohibitedBehavior, req.boundingCondition, req.rationale,
-            req.signalName, req.pin, req.signalProperties, req.signalConsumer, req.signalTiming, req.signalFailure
+            req.signalName, req.pin, req.signalProperties, req.signalConsumer, req.signalTiming, req.signalFailure,
+            req.limitedQuantity, req.limitBound, req.maintainedQuantity, req.setpoint, req.setpointTolerance,
+            req.information, req.recipient, req.indicationLatency,
+            req.message, req.channel, req.transmitTiming,
+            req.dataStored, req.storageMedium, req.persistenceCondition
         ].filter(Boolean).join(' ');
 
+        // Statement-only scope: the unobservable-activity verbs are fine
+        // in rationale prose ("to ensure the driver is warned"); they are
+        // only forbidden inside the requirement statement itself.
+        const statementBlobs = req.rationale
+            ? textBlobs.replace(req.rationale, '')
+            : textBlobs;
         GRAMMAR.forbiddenWords.forEach(fw => {
             const re = new RegExp(`\\b${fw.word.replace('.', '\\.')}\\b`, 'i');
-            if (re.test(textBlobs)) {
+            const haystack = fw.scope === 'statement' ? statementBlobs : textBlobs;
+            if (re.test(haystack)) {
                 warnings.push(`Forbidden word "${fw.word}": ${fw.reason}`);
+            }
+        });
+
+        // Atomicity (v1.6.0): "and"/"or" inside a RESPONSE field suggests
+        // two requirements glued together — warn, don't block. Deliberately
+        // NOT applied to conditions/guards: a compound guard ("While A and
+        // B") is legitimate EARS; a compound RESPONSE is not atomic.
+        const responseFields = [
+            ['output', req.output], ['reaction', req.reaction],
+            ['capability', req.capability], ['information', req.information],
+            ['limited quantity', req.limitedQuantity],
+            ['maintained quantity', req.maintainedQuantity],
+            ['message', req.message], ['data stored', req.dataStored],
+            ['prohibited behavior', req.prohibitedBehavior]
+        ];
+        responseFields.forEach(([label, v]) => {
+            if (v && /\b(and|or)\b/i.test(v)) {
+                warnings.push(`Atomicity: "${label}" contains "and/or" — this looks like two requirements in one. Split them so each is individually traceable and testable.`);
             }
         });
 

@@ -34,6 +34,11 @@ class MultiSelectDropdown {
         // refresh dependent UI (e.g. the right-pane model summary)
         // without flickering during in-flight selections.
         this.onClose    = opts.onClose    || (() => {});
+        // Single-select mode (v1.6.1): exactly one (or zero) value;
+        // choosing an option replaces the selection and closes the
+        // popover. Gives single trace dropdowns (e.g. Parent Safety
+        // Goal) the same search the multi-selects already have.
+        this.single     = !!opts.single;
 
         // Visible button — sits in the row cell. Background colour and
         // icon convey selection state at a glance:
@@ -122,13 +127,13 @@ class MultiSelectDropdown {
             empty.textContent = this.emptyLabel;
             this.popover.appendChild(empty);
         } else {
-            // Search filter. Only shown when the list is long enough to
-            // be tedious to scan (e.g. 200 System requirements). For
-            // short lists it would just be noise, so it's hidden under
-            // the threshold. Filtering is case-insensitive substring
-            // over the visible label; it never changes selection, only
-            // visibility, so existing behaviour is untouched.
-            const FILTER_THRESHOLD = 8;
+            // Search filter. Shown whenever the list is beyond trivial
+            // size — v1.6.2 lowered the threshold from 8 to 4 after field
+            // feedback: typical projects hold 5–8 functions/goals/modes,
+            // so the old threshold made the search look absent entirely.
+            // Filtering is case-insensitive substring over the visible
+            // label; it never changes selection, only visibility.
+            const FILTER_THRESHOLD = 4;
             let filterInput = null;
             if (this.options.length > FILTER_THRESHOLD) {
                 const fwrap = document.createElement('div');
@@ -153,6 +158,14 @@ class MultiSelectDropdown {
                 cb.type = 'checkbox';
                 cb.checked = this.selected.has(opt.value);
                 cb.addEventListener('change', () => {
+                    if (this.single) {
+                        this.selected.clear();
+                        if (cb.checked) this.selected.add(opt.value);
+                        this._refreshButton();
+                        this.onChange([...this.selected]);
+                        this._close();
+                        return;
+                    }
                     if (cb.checked) this.selected.add(opt.value);
                     else            this.selected.delete(opt.value);
                     this._refreshButton();

@@ -92,9 +92,17 @@ class EditorView {
             elementId: this.currentElement ? this.currentElement.id : null
         });
         draft.id = '(draft)';
-        if (this.currentChapter.subjectMode === 'system') draft.subject = 'the system';
-        else if (this.currentChapter.subjectMode === 'actor') draft.subject = 'the system';
-        else if (this.currentElement) draft.subject = this.currentElement.name;
+        // Default subject from the discipline vocabulary: the subject names
+        // the thing under specification at THIS abstraction level ("the
+        // item" / "the system" / "the component" / "the software unit").
+        // An explicit element still wins — white-box rows speak about the
+        // element itself.
+        const vocab = GRAMMAR.disciplineVocabulary[this.doc.discipline] || {};
+        if (this.currentElement) draft.subject = this.currentElement.name;
+        else if (this.currentChapter.subjectMode === 'system' ||
+                 this.currentChapter.subjectMode === 'actor') {
+            draft.subject = vocab.subject || 'the system';
+        }
         return draft;
     }
 
@@ -163,7 +171,11 @@ class EditorView {
         // (mode simulator's current mode, generator's status line) survive
         // an onChange-triggered re-render. setDocument is called on each
         // render to refresh the widget's view of the data.
-        if (typeof chapter.extraWidgets === 'function') {
+        if (typeof chapter.extraWidgets === 'function' &&
+            !(chapter.widgetsAtRootOnly && this.currentElement)) {
+            // widgetsAtRootOnly: chapter-level overviews (e.g. the Element
+            // Coverage Diagnostic) belong at the chapter root, not
+            // repeated inside every element sub-chapter.
             if (!this._widgets) {
                 this._widgets = chapter.extraWidgets(this.doc, this.onChange);
             } else {
@@ -272,8 +284,18 @@ class EditorView {
         shallSpan.textContent = 'SHALL';
         row1.appendChild(shallSpan);
 
+        // Predicate vocabulary, guided per abstraction level: the
+        // discipline's preferred predicates sort first and carry a
+        // recommendation tag. Guidance only — every predicate stays
+        // selectable so cross-level data remains editable.
+        const preferred = (GRAMMAR.disciplineVocabulary[this.doc.discipline] || {}).preferredPredicates || [];
+        const predOpts = GRAMMAR.predicates
+            .map(p => ({ value: p.id,
+                label: preferred.includes(p.id) ? `${p.label} ★` : p.label,
+                pref: preferred.includes(p.id) }))
+            .sort((a, b) => (b.pref - a.pref));
         row1.appendChild(this._makeSelectSlot('Predicate',
-            GRAMMAR.predicates.map(p => ({ value: p.id, label: p.label })),
+            predOpts.map(o => ({ value: o.value, label: o.label })),
             this.draftReq.predicate,
             v => { this.draftReq.predicate = v; this._refreshBuilder(wrap); }
         ));
@@ -418,9 +440,9 @@ class EditorView {
             .map(m => ({ value: m.id, label: m.label }));
 
         if (ch === 'ch04_fsc') {
-            panel.appendChild(this._makeSelectSlot('Parent Safety Goal *', this._sgOptions(),
-                this.draftReq.parentSG,
-                v => { this.draftReq.parentSG = v; this._refreshPreview(wrap); }));
+            this._mountSingleSelectAttr(panel, 'Parent Safety Goal *', 'parentSG',
+                this._sgOptionsForSearch(), 'No Safety Goals declared yet.',
+                () => this._refreshPreview(wrap));
             panel.appendChild(this._makeSelectSlot('ASIL *', asilOpts, this.draftReq.asil,
                 v => { this.draftReq.asil = v; this._refreshPreview(wrap); }));
             panel.appendChild(this._makeInputSlot('FTTI contribution', this.draftReq.fttiContribution,
@@ -539,9 +561,9 @@ class EditorView {
             this._mountMultiSelectAttr(panel, 'Parent item function(s)', 'parentItemFunctions',
                 this.doc.itemFunctions.map(f => ({ value: f.id, label: f.name || f.id })),
                 'No item functions declared yet.');
-            panel.appendChild(this._makeSelectSlot('Parent Safety Goal', this._sgOptions(),
-                this.draftReq.parentSG,
-                v => { this.draftReq.parentSG = v; this._refreshPreview(wrap); }));
+            this._mountSingleSelectAttr(panel, 'Parent Safety Goal', 'parentSG',
+                this._sgOptionsForSearch(), 'No Safety Goals declared yet.',
+                () => this._refreshPreview(wrap));
             this._mountMultiSelectAttr(panel, 'Verification method(s) *', 'verification', verifOpts, 'No verification methods.');
             panel.appendChild(this._makeInputSlot('Pass criterion', this.draftReq.passCriterion,
                 v => { this.draftReq.passCriterion = v; this._refreshPreview(wrap); }));
@@ -587,6 +609,14 @@ class EditorView {
                 }))];
     }
 
+    /** Same as _sgOptions but without the '— select —' sentinel: the
+     *  searchable single-select shows its own empty state ("○ none"). */
+    _sgOptionsForSearch() {
+        return this.doc.safetyGoals.map(g => ({
+            value: g.id, label: `${g.name || g.id} (${g.asil || 'QM'})`
+        }));
+    }
+
     _safeStateOptions() {
         return [{value:'',label:'None'},
                 ...(this.doc.safeStates || []).map(s => ({
@@ -626,6 +656,26 @@ class EditorView {
             options, this.draftReq[attrName] || [],
             newIds => { this.draftReq[attrName] = newIds; },
             { unitLabel: 'item',
+              emptyLabel: emptyLabel || 'No options available.' });
+        mount.replaceWith(ms.element);
+    }
+
+    /** Single-valued trace dropdown with the same search the multi-selects
+     *  have (v1.6.1). Stores '' or one id on the draft attribute. */
+    _mountSingleSelectAttr(panel, label, attrName, options, emptyLabel, onChangeExtra) {
+        const slot = document.createElement('div');
+        slot.className = 'req-slot';
+        slot.innerHTML = `<label>${label}</label>`;
+        const mount = document.createElement('span');
+        slot.appendChild(mount);
+        panel.appendChild(slot);
+        const ms = new MultiSelectDropdown(
+            options, this.draftReq[attrName] ? [this.draftReq[attrName]] : [],
+            newIds => {
+                this.draftReq[attrName] = newIds[0] || '';
+                if (onChangeExtra) onChangeExtra(this.draftReq[attrName]);
+            },
+            { unitLabel: 'item', single: true,
               emptyLabel: emptyLabel || 'No options available.' });
         mount.replaceWith(ms.element);
     }
@@ -781,6 +831,7 @@ class EditorView {
                     ${req.source ? `<span class="req-badge" class="req-badge req-badge-legacy" title="Legacy free-text source field.">legacy src: ${this._resolveSourceTokens(req.source)}</span>` : ''}
                 </div>
                 ${req.rationale ? `<div style="font-size:11px;color:#666;margin-top:0.3rem;"><em>Rationale:</em> ${req.rationale}</div>` : ''}
+                ${req.passCriterion ? `<div style="font-size:11px;color:#666;margin-top:0.15rem;"><em>Pass criterion:</em> ${req.passCriterion}</div>` : ''}
             `;
             const implEl = item.querySelector('.req-impl');
             implEl.addEventListener('change', e => {

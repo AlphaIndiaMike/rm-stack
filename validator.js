@@ -101,6 +101,32 @@ class DocumentValidator {
         }));
     }
 
+    /** Integrity (ASIL/SIL) tracking summary for the Model Summary pane
+     *  (v1.5.9). Counts, per downstream discipline, the safety-classified
+     *  System parents that are: untraced (nothing derived), insufficient
+     *  (best derived requirement below the parent's rank — warning), or
+     *  satisfied cross-family (SIL\u2194ASIL convention — info). */
+    integrityTracking() {
+        const mk = (kind, chapters) => {
+            const cov = this.systemReqDerivationCoverage(kind, chapters)
+                .filter(c => {
+                    const l = (c.asil || '').trim();
+                    return l && l !== 'QM' && c.state !== 'notHere';
+                });
+            return {
+                kind,
+                safetyParents: cov.length,
+                untraced: cov.filter(c => c.state === 'gap' || c.state === 'advisory').length,
+                insufficient: cov.filter(c => c.state === 'integrityGap').length,
+                crossFamily: cov.filter(c => c.state === 'covered' && c.integrityInfo).length
+            };
+        };
+        return [
+            mk('hw', (Chapters.outline('hardware') || []).map(c => c.id)),
+            mk('sw', (Chapters.outline('software') || []).map(c => c.id))
+        ];
+    }
+
     /** Development-cost estimate (right-pane "Budget Est." panel).
      *
      *  Model: every WORD of every built requirement statement costs the
@@ -392,18 +418,25 @@ class DocumentValidator {
      * Per System parent, this reports:
      *   - derivedCount: SW/HW requirements (in targetChapterIds) whose
      *     parentSystemReqs references it.
-     *   - integrity inheritance: there is NO ASIL/SIL decomposition at
-     *     the TSR→SW/HW hop, so a safety-classified parent (asil set and
-     *     not 'QM') must have >=1 derived requirement carrying the EXACT
-     *     same level. Strict equality — a higher child level does not
-     *     satisfy a lower parent, ASIL and SIL never substitute.
+     *   - integrity inheritance (v1.5.9, rank-based): a safety-classified
+     *     parent (asil set, not 'QM') needs >=1 derived requirement at a
+     *     SUFFICIENT integrity — child rank >= parent rank on the
+     *     project's declared SIL<->ASIL ladder (GRAMMAR.integrityRank).
+     *     A SIL child can satisfy an ASIL parent of equal/greater rank
+     *     (cross-family: surfaced as a non-blocking INFO note, since the
+     *     two standards' obligations are not literally identical). A
+     *     best child BELOW the parent rank is an insufficient downtrace
+     *     — a WARNING, not an error: legitimate under ISO 26262-9
+     *     decomposition, but it must be the user's deliberate choice.
      *
      * States (mutually exclusive, first match wins):
      *   gap          allocated to this discipline, nothing derives
-     *   integrityGap derived req(s) exist but none inherits the parent's
-     *                ASIL/SIL (safety parents only)
+     *   integrityGap derived req(s) exist but the best one is BELOW the
+     *                parent's integrity rank (safety parents only) —
+     *                rendered as a warning
      *   advisory     no allocation set and nothing derives (cannot assess)
-     *   covered      derived, and integrity inherited if safety
+     *   covered      derived, integrity sufficient if safety; carries
+     *                integrityInfo when satisfied cross-family (SIL<->ASIL)
      *   notHere      not allocated here and nothing derives
      */
     systemReqDerivationCoverage(targetKind, targetChapterIds) {
@@ -418,8 +451,15 @@ class DocumentValidator {
                 r.parentSystemReqs.includes(p.id));
             const level = (p.asil || '').trim();
             const isSafety = level !== '' && level !== 'QM';
-            const integrityInherited = !isSafety ||
-                derived.some(r => (r.asil || '').trim() === level);
+            let integrityInherited = !isSafety;
+            let integrityInfo = null;
+            if (isSafety) {
+                const sats = derived.map(r => GRAMMAR.integritySatisfies((r.asil || '').trim(), level));
+                integrityInherited = sats.some(s => s.ok);
+                if (integrityInherited && !sats.some(s => s.ok && !s.crossFamily)) {
+                    integrityInfo = `Satisfied via the project's SIL\u2194ASIL equivalence convention (no normative mapping exists between IEC 61508 and ISO 26262; e.g. higher ASILs carry hardware-metric obligations that SILs do not mirror 1:1).`;
+                }
+            }
             const alloc = (p.hwSwAllocation || '').toLowerCase();
             const allocatedHere = alloc === targetKind || alloc === 'both';
             const allocUnset = !alloc;
@@ -442,6 +482,7 @@ class DocumentValidator {
             return {
                 id: p.id,
                 layer,
+                integrityInfo,
                 statement: GrammarValidator.buildStatement(p) || '(incomplete)',
                 asil: level || 'QM',
                 isSafety,
@@ -669,6 +710,10 @@ class DocumentValidator {
                 else sumMs += b;
             });
             const budget = tr ? resolveBudget(tr) : { ms: null, src: null };
+            // Human label of the anchored transition (ID + FROM → TO) so
+            // diagnostics can identify the chain's transition without
+            // ID-decoding (v1.6.3).
+            const trLabel = tr ? this._trLabel(tr) : null;
             let status;
             if (!tr)                                    status = 'no-transition';
             else if (budget.ms == null)                 status = 'no-budget';
@@ -676,7 +721,7 @@ class DocumentValidator {
             else if (sumMs > budget.ms)                 status = 'over';
             else                                        status = 'ok';
             return {
-                chainId: ch.id, name: ch.name || ch.id, status,
+                chainId: ch.id, name: ch.name || ch.id, status, trLabel,
                 budgetMs: budget.ms, budgetSource: budget.src,
                 sumMs, missingBudgets, dangling
             };

@@ -64,17 +64,31 @@ class ExternalInterfaceMapping {
     _externalIfs() {
         return (this.doc.interfaces || []).filter(i => (i.scope || 'external') === 'external');
     }
+    _internalIfs() {
+        return (this.doc.interfaces || []).filter(i => i.scope === 'internal');
+    }
     _opts(selectedId, list, placeholder) {
         return ['<option value="">' + (placeholder || '—') + '</option>'].concat(
             list.map(o => `<option value="${o.id}" ${o.id === selectedId ? 'selected' : ''}>${(o.name || o.id).replace(/"/g,'&quot;')}</option>`)
         ).join('');
     }
+    /** External AND internal interfaces, grouped. A signal from an
+     *  in-system source (e.g. Radar → MCU) travels over an INTERNAL
+     *  interface; until v1.6.3 those were unselectable here, so such
+     *  signals could never be mapped. */
+    _ifOptsGrouped(selectedId, exts, ints, placeholder) {
+        const opt = o => `<option value="${o.id}" ${o.id === selectedId ? 'selected' : ''}>${(o.name || o.id).replace(/"/g,'&quot;')}</option>`;
+        let html = '<option value="">' + (placeholder || '— interface —') + '</option>';
+        if (exts.length) html += '<optgroup label="External interfaces">' + exts.map(opt).join('') + '</optgroup>';
+        if (ints.length) html += '<optgroup label="Internal interfaces">' + ints.map(opt).join('') + '</optgroup>';
+        return html;
+    }
 
     render(container) {
         const wrap = document.createElement('div');
         wrap.className = 'requirements-section';
-        wrap.innerHTML = `<div class="section-title">External Interface Mapping
-            <span class="help-icon" title="For each signal in the catalog above, choose the external interface it belongs to (declared in System Breakdown) and the controller (MCU) it terminates on. Reads left to right: interface — signal — controller.">?</span>
+        wrap.innerHTML = `<div class="section-title">Interface Mapping
+            <span class="help-icon" title="For each signal in the catalog above, choose the interface it travels over — external (sensor/actuator boundary) or internal (between in-system elements, e.g. Radar → MCU) — and the controller (MCU) it terminates on. Reads left to right: interface — signal — controller.">?</span>
         </div>`;
 
         const sigs = this.doc.hsiSignals || [];
@@ -88,19 +102,22 @@ class ExternalInterfaceMapping {
         }
 
         const exts = this._externalIfs();
+        const ints = this._internalIfs();
         const ctrls = this._controllers();
         const cols = '1fr 1.6rem 1fr 1.6rem 1fr 5rem';
 
-        wrap.appendChild(hsiHeader(cols, ['External interface', '', 'Signal', '', 'Controller (MCU)', 'Status']));
+        wrap.appendChild(hsiHeader(cols, ['Interface (ext / int)', '', 'Signal', '', 'Controller (MCU)', 'Status']));
 
         sigs.forEach(s => {
             const row = hsiRow(cols);
 
             const ifSel = document.createElement('select');
-            ifSel.innerHTML = this._opts(s.interfaceId, exts, '— interface —');
+            ifSel.classList.add('select-truncate');
+            ifSel.innerHTML = this._ifOptsGrouped(s.interfaceId, exts, ints, '— interface —');
             ifSel.addEventListener('change', () => { s.interfaceId = ifSel.value; this.onChange(); });
 
             const mcuSel = document.createElement('select');
+            mcuSel.classList.add('select-truncate');
             mcuSel.innerHTML = this._opts(s.elementId, ctrls, '— controller —');
             mcuSel.addEventListener('change', () => { s.elementId = mcuSel.value; this.onChange(); });
 
@@ -115,10 +132,10 @@ class ExternalInterfaceMapping {
             wrap.appendChild(row);
         });
 
-        if (exts.length === 0) {
+        if (exts.length === 0 && ints.length === 0) {
             const note = document.createElement('div');
             note.className = 'empty-state';
-            note.textContent = 'No external interfaces declared yet — add them in System Breakdown → External Interfaces.';
+            note.textContent = 'No interfaces declared yet — add external or internal interfaces in System Breakdown.';
             wrap.appendChild(note);
         }
         if (ctrls.length === 0) {
@@ -257,10 +274,21 @@ class HsiRequirementGenerator {
     /** A signal is eligible if it has the mandatory fields the 'interface'
      *  predicate needs (name, pin, electrical) and isn't already represented
      *  by a predicate=interface requirement with the same signalName + pin. */
+    /** Which required fields a signal is still missing, with WHERE to
+     *  set each — pure and testable; drives the per-signal summary so
+     *  "incomplete" is never a mystery (v1.6.5). */
+    _missingOf(s) {
+        const out = [];
+        if (!s.name)       out.push('name (catalog row)');
+        if (!s.pin)        out.push('pin / address (catalog row)');
+        if (!s.electrical) out.push('electrical (▸ detail of the catalog row)');
+        return out;
+    }
+
     _eligible() {
         const sigs = this.doc.hsiSignals || [];
         return sigs.filter(s => {
-            if (!s.name || !s.pin || !s.electrical) return false;
+            if (this._missingOf(s).length) return false;
             return !this.doc.requirements.some(r =>
                 r.chapterId === 'ch09_hsi' && r.predicate === 'interface' &&
                 r.signalName === s.name && r.pin === s.pin);
@@ -315,9 +343,22 @@ class HsiRequirementGenerator {
     render(container) {
         const wrap = document.createElement('div');
         wrap.className = 'requirements-section';
+        this._renderBody(wrap);
+        container.appendChild(wrap);
+    }
+
+    /** Body render, separated so the ⟳ Refresh button can re-read the
+     *  catalog/mapping state above WITHOUT relying on the editor's event
+     *  chain (v1.6.3 — the summary went stale when upstream edits did
+     *  not propagate a re-render). The doc object is shared and mutated
+     *  in place by the tables above, so a re-read is always current. */
+    _renderBody(wrap) {
         wrap.innerHTML = `<div class="section-title">Generate Interface Requirements
             <span class="help-icon" title="One click: each fully-specified signal (name + pin + electrical) becomes an 'interface'-predicate requirement whose subject is the controller it terminates on. Re-clicking is safe — already-generated signals are skipped.">?</span>
+            <button class="btn-add" style="margin-left:auto;font-size:11px;" title="Re-read the signal catalog and mapping above and recompute what can be generated.">⟳ Refresh</button>
         </div>`;
+        wrap.querySelector('.section-title button').addEventListener('click',
+            () => this._renderBody(wrap));
 
         const sigs = this.doc.hsiSignals || [];
         const eligible = this._eligible();
@@ -329,8 +370,31 @@ class HsiRequirementGenerator {
         summary.className = 'empty-state';
         summary.innerHTML = `${sigs.length} signal(s), ${alreadyGenerated} already generated, ` +
             `<strong>${eligible.length}</strong> ready` +
-            (incomplete > 0 ? `, ${incomplete} incomplete (need name + pin + electrical)` : '') + '.';
+            (incomplete > 0 ? `, ${incomplete} incomplete` : '') + '.';
         wrap.appendChild(summary);
+
+        // Name each incomplete signal and the EXACT fields it misses,
+        // with where to set them — "incomplete" must never be a mystery.
+        const missRows = sigs
+            .map(s => ({ s, miss: this._missingOf(s) }))
+            .filter(x => x.miss.length);
+        if (missRows.length) {
+            const ul = document.createElement('ul');
+            ul.className = 'summary-list';
+            missRows.slice(0, 6).forEach(({ s, miss }) => {
+                const li = document.createElement('li');
+                li.className = 'warn';
+                li.textContent = `${s.name || s.id || '(unnamed signal)'} — missing ${miss.join(', ')}`;
+                ul.appendChild(li);
+            });
+            if (missRows.length > 6) {
+                const li = document.createElement('li');
+                li.className = 'warn';
+                li.textContent = `… and ${missRows.length - 6} more.`;
+                ul.appendChild(li);
+            }
+            wrap.appendChild(ul);
+        }
 
         const btn = document.createElement('button');
         btn.className = 'btn-add btn-generate';
@@ -352,8 +416,6 @@ class HsiRequirementGenerator {
                 status.textContent = `Added ${n} interface requirement(s) — see the list below.`;
             }
         });
-
-        container.appendChild(wrap);
     }
 }
 

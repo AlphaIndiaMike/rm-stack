@@ -26,12 +26,13 @@ Declarations.register('internalInterface', {
     singular: 'Internal Interface',
     helpHeaders: {
         'Name':     'Internal interface label (e.g. CAN_INT1, SPI_A, InterCore_Mbox).',
-        'From':     'Producing system element.',
-        'To':       'Consuming system element.',
+        'From':     'Producing system element (or endpoint A when bidirectional).',
+        'To':       'Consuming system element (or endpoint B when bidirectional).',
+        '→':        'Direction. Click the arrow in a row to toggle: → producer-to-consumer, ↔ bidirectional (e.g. CAN).',
         'Protocol': 'Protocol or medium (CAN, SPI, shared memory, discrete line, ...).',
         '▸':        'Expand to edit period, jitter, time budget, failure behaviour, notes.'
     },
-    headers: ['ID', 'Name', 'From', '', 'To', 'Protocol', '▸', ''],
+    headers: ['ID', 'Name', 'From', '→', 'To', 'Protocol', '▸', ''],
     gridCols: '90px 1fr 1fr 30px 1fr 130px 30px 40px',
     getList: doc => doc.interfaces.filter(i => i.scope === 'internal'),
     add: doc => {
@@ -56,7 +57,9 @@ Declarations.register('internalInterface', {
         <div class="req-id" style="align-self:center;" title="Internal stable ID.">${item.id}</div>
         <input type="text" value="${(item.name||'').replace(/"/g,'&quot;')}" placeholder="e.g. CAN_INT1">
         <select data-iif="producer" title="Producing system element."></select>
-        <div style="text-align:center;color:var(--text-dim);align-self:center;">→</div>
+        <button type="button" data-iif="dir" class="iif-dir"
+            title="Click to toggle direction: → producer-to-consumer, ↔ bidirectional (e.g. CAN)."
+            style="background:none;border:none;cursor:pointer;color:var(--text-dim);font-size:14px;align-self:center;">${item.direction === 'bidirectional' ? '↔' : '→'}</button>
         <select data-iif="consumer" title="Consuming system element."></select>
         <input type="text" value="${(item.protocol||'').replace(/"/g,'&quot;')}" placeholder="CAN, SPI, ...">
         <button type="button" class="if-expand if-expand-btn" data-if-id="${item.id}" title="Edit period, jitter, budget, failure behaviour">▸</button>
@@ -73,6 +76,19 @@ Declarations.register('internalInterface', {
         };
         fill(row.querySelector('select[data-iif="producer"]'), item.producerElementId);
         fill(row.querySelector('select[data-iif="consumer"]'), item.consumerElementId);
+
+        // Direction toggle — reuses the existing InterfaceSpec.direction
+        // field ('producer-to-consumer' | 'bidirectional'). Buses like
+        // CAN are inherently bidirectional; before v1.6.5 the arrow was
+        // a static → and the model value was unreachable from the UI.
+        const dirBtn = row.querySelector('button[data-iif="dir"]');
+        if (dirBtn) {
+            dirBtn.addEventListener('click', () => {
+                item.direction = item.direction === 'bidirectional'
+                    ? 'producer-to-consumer' : 'bidirectional';
+                dirBtn.textContent = item.direction === 'bidirectional' ? '↔' : '→';
+            });
+        }
 
         // ▸ expander — SMART detail panel (own input listeners write to
         // the item directly, exactly like declarations/interface.js).

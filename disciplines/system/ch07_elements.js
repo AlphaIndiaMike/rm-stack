@@ -40,13 +40,14 @@ class ElementCoverageDiagnostic {
 
         const head = document.createElement('div');
         head.style.cssText = `display:grid;grid-template-columns:${cols};gap:0.4rem;padding:0.5rem 0.75rem;background:var(--bg-elevated);font-size:11px;text-transform:uppercase;color:var(--text-dim);font-weight:600;border-bottom:1px solid var(--border);`;
+        const hd = (label, help) => `<div>${label} <span class="help-icon" title="${help.replace(/"/g,'&quot;')}">?</span></div>`;
         head.innerHTML = `
             <div>Element</div>
             <div>ASIL</div>
-            <div>Reqs / 4–13</div>
-            <div>Allocated fns</div>
-            <div>Traces to SG</div>
-            <div>Has acceptance</div>
+            ${hd('Reqs / 4–13', 'TSR count for this element. Fulfil: open the element (click the row) and add requirements. 4 is the under-specification floor, 13 the decomposition ceiling.')}
+            ${hd('Implements', 'How many Item Functions this element realizes. Fulfil: in Chapter 5 System Breakdown, set the \'Implements\' multi-select on the element row.')}
+            ${hd('Traces to SG', 'Whether any of this element\'s TSRs reaches a Safety Goal through the chain TSR → parent acceptance requirement → parent FSR → parent Safety Goal. Fulfil: set \'Parent acceptance req(s)\' on a TSR, make sure that acceptance requirement has \'Parent FSR(s)\', and the FSR a \'Parent Safety Goal\'.')}
+            ${hd('Has acceptance', 'Whether any of this element\'s TSRs has \'Parent acceptance req(s)\' set. Fulfil: open the element and set the parent on each TSR.')}
             <div>Status</div>
         `;
         table.appendChild(head);
@@ -77,7 +78,7 @@ class ElementCoverageDiagnostic {
                 <div style="font-weight:500;color:var(--accent);">${(c.name || '(unnamed)')}</div>
                 <div>${c.asil || 'QM'}</div>
                 <div>${c.reqCount} <span class="completeness-dot ${status}" style="margin-left:6px;"></span></div>
-                <div>${c.allocatedCount}</div>
+                <div style="${c.allocatedCount === 0 ? 'color:var(--amber);' : ''}" title="${c.allocatedCount === 0 ? 'No item functions allocated — set the Implements multi-select on this element in System Breakdown.' : ''}">${c.allocatedCount === 0 ? '⚠ 0' : c.allocatedCount}</div>
                 <div>${hasSG ? '✓' : '—'}</div>
                 <div>${hasAccept ? '✓' : '—'}</div>
                 <div title="${statusLabel.replace(/"/g,'&quot;')}">${statusLabel}</div>
@@ -108,10 +109,13 @@ Chapters.register('system', {
     number: '5',
     title: 'Technical Safety Requirements (White-Box Layer)',
     order: 80,
-    intro: 'Technical Safety Concept (ISO 26262-4:6 / ASPICE SYS.3). TSRs refine the black-box acceptance contract against the system architecture and are allocated to architectural elements. Auto-expands one sub-chapter per declared element; subject = element name. Each TSR carries its HW/SW allocation — that allocation is the handoff to the HW-RS / SW-RS documents.',
-    allowsRequirements: false,
-    subjectMode: 'none',
+    intro: 'Technical Safety Concept (ISO 26262-4:6 / ASPICE SYS.3). TSRs refine the black-box acceptance contract against the system architecture. OVERALL technical-safety-concept requirements (system-wide mechanisms, cross-element behaviour) are authored here at the chapter root with subject "the system"; element-specific TSRs live in the auto-expanded sub-chapter per declared element (subject = element name). Each TSR carries its HW/SW allocation — that allocation is the handoff to the HW-RS / SW-RS documents.',
+    allowsRequirements: true,
+    subjectMode: 'system',
     autoExpand: 'elements',
+    // The coverage diagnostic is a chapter-level overview; inside an
+    // element sub-chapter it is noise (and repeats on every level).
+    widgetsAtRootOnly: true,
     extraWidgets: doc => [new ElementCoverageDiagnostic(doc)],
     checklist: [
         { id: 'c7a', text: 'Every element has ≥1 Technical Safety Requirement.',

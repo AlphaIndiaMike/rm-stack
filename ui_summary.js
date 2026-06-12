@@ -42,8 +42,35 @@ class SummaryView {
         // Orphans
         container.appendChild(this._orphansSection(validator));
 
+        // Integrity tracking — ASIL/SIL downtrace health
+        container.appendChild(this._integritySection(validator));
+
         // Budget Est. — development-cost estimate from requirement words
         container.appendChild(this._budgetEstimateSection(validator));
+    }
+
+    /** Integrity Tracking — per downstream discipline: safety parents
+     *  untraced, insufficient (below-rank: warning), and satisfied via
+     *  the SIL\u2194ASIL convention (info). */
+    _integritySection(validator) {
+        const rows = validator.integrityTracking();
+        const tip = 'Downtrace health of safety-classified (ASIL/SIL) System requirements into HW and SW. "Untraced" = nothing derived yet; "insufficient" = the best derived requirement sits below the parent\'s integrity (a warning — legitimate only as deliberate decomposition); "via SIL\u2194ASIL" = satisfied across standards by the project\'s declared equivalence (informational).';
+        const items = rows.map(r => {
+            const label = r.kind === 'hw' ? 'System → HW' : 'System → SW';
+            const bad = r.untraced + r.insufficient;
+            const parts = [];
+            if (r.untraced)     parts.push(`${r.untraced} untraced`);
+            if (r.insufficient) parts.push(`${r.insufficient} insufficient`);
+            if (r.crossFamily)  parts.push(`${r.crossFamily} via SIL\u2194ASIL \u2139`);
+            return {
+                text: `${label} <small style="color:#999;">${r.safetyParents} safety parent${r.safetyParents === 1 ? '' : 's'}</small>`,
+                badge: parts.length ? parts.join(' · ') : '✓ all traced',
+                badgeTitle: tip,
+                cls: bad > 0 ? 'warn' : ''
+            };
+        });
+        return this._makeList('Integrity Tracking (ASIL/SIL)', null, items,
+            'no safety-classified requirements yet', tip);
     }
 
     /** Requirement Budget — per-discipline committed/ceiling. */
@@ -199,26 +226,25 @@ class SummaryView {
         })), orph.length === 0 ? 'No orphans' : null, tip);
     }
 
-    /** Budget Est. — development-cost estimate. Every word of every built
-     *  requirement statement costs its discipline's per-word rate (see
-     *  BUDGET_COST_RATES_EUR_PER_WORD in chapter_registry.js — the single
-     *  retuning point); discipline costs amount together into the final
-     *  figure. Requirements only — declarations and tooling don't cost
-     *  into the product. */
+    /** Budget Est. — development-cost estimate. The UI deliberately
+     *  presents this as an empirical estimate and does NOT disclose the
+     *  estimation model (the model and its tuning are proprietary to the
+     *  project owner; see budgetEstimate() in validator.js and the rates
+     *  in chapter_registry.js — source-level only, never user-facing). */
     _budgetEstimateSection(validator) {
         const est = validator.budgetEstimate();
         const fmt = n => n.toLocaleString('de-DE'); // 21.000 style
-        const tip = 'Development-cost estimate: each requirement word costs the discipline\'s configured rate (EUR/word, see chapter_registry.js), and the discipline costs amount together into the final figure. Requirements only — declarations and diagnostics don\'t cost into the product.';
+        const tip = 'Empirical estimation based on the declared requirements. It considers all development costs including implementation, validation, staff, and other supporting assets.';
         const items = est.perDiscipline.map(d => ({
-            text: `${d.label} <small style="color:#999;">${d.reqCount} req · ${d.words} words × ${fmt(d.rate)} €</small>`,
+            text: `${d.label} <small style="color:#999;">${d.reqCount} requirement${d.reqCount === 1 ? '' : 's'}</small>`,
             badge: `${fmt(d.cost)} €`,
-            badgeTitle: `${d.words} words × ${fmt(d.rate)} €/word = ${fmt(d.cost)} €`,
+            badgeTitle: `Estimated development cost attributable to the ${d.label} discipline.`,
             cls: ''
         }));
         items.push({
             text: '<strong>Estimated development cost</strong>',
             badge: `<strong>${fmt(est.totalCost)} €</strong>`,
-            badgeTitle: `${est.totalWords} requirement words across all disciplines`,
+            badgeTitle: 'Estimated total development cost across all disciplines.',
             cls: ''
         });
         return this._makeList('Budget Est.', null, items, 'no requirements yet', tip);
