@@ -15,6 +15,31 @@ document.addEventListener('DOMContentLoaded', () => {
     // the lifetime of the page.
     new TooltipManager();
 
+    // --- Unsaved-changes guard ---------------------------------------
+    // `dirty` is true whenever the in-memory document has edits not yet
+    // written to a saved .json. It is set on every model change, cleared
+    // on save and on load (a freshly loaded file matches its own file),
+    // and consulted by the beforeunload handler below so the browser
+    // warns before the user loses work. Module-scope so onModelChanged,
+    // the save button and the load handler can all reach it.
+    let dirty = false;
+    const markDirty = () => { dirty = true; };
+    const markClean = () => { dirty = false; };
+    window.__markDirty = markDirty;   // reached by onModelChanged (top-level fn)
+    window.__markClean = markClean;
+
+    // Native confirmation on tab/window close or reload, only when there
+    // are unsaved changes. Per the HTML spec the browser shows its own
+    // generic prompt; preventDefault + returnValue is the cross-browser
+    // incantation that triggers it. No dialog appears when `dirty` is
+    // false, so a saved project closes without friction.
+    window.addEventListener('beforeunload', e => {
+        if (!dirty) return;
+        e.preventDefault();
+        e.returnValue = '';   // required by Chrome/Edge to show the prompt
+        return '';
+    });
+
     // --- Initial document ---
     doc = new SyrsDocument({ discipline: 'system', docClass: 'complex' });
 
@@ -72,7 +97,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('saveJsonButton').addEventListener('click', () => {
-        Persistence.save(doc, () => refreshProjectNamePill());
+        Persistence.save(doc, () => { refreshProjectNamePill(); markClean(); });
     });
 
     const loadInput = document.getElementById('loadJsonInput');    document.getElementById('loadJsonButton').addEventListener('click', () => loadInput.click());
@@ -99,6 +124,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('docClassSelect').value = doc.docClass;
             document.getElementById('disciplineSelect').value = doc.discipline;
             refreshProjectNamePill();
+            markClean();   // a just-loaded project matches its file on disk
             selectDefaultChapterOrWelcome(true);
             renderAll();
         } catch (err) {
@@ -195,6 +221,9 @@ function onChapterSelected(chapterId, elementId) {
 }
 
 function onModelChanged() {
+    // Any edit makes the in-memory document diverge from the last saved
+    // file; the beforeunload guard relies on this flag.
+    if (window.__markDirty) window.__markDirty();
     renderAll();
 }
 
