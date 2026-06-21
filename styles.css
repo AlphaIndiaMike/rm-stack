@@ -1478,7 +1478,17 @@ body { height: 100vh; min-height: 0; overflow: hidden; }
   overflow: hidden;
   text-overflow: ellipsis;
   user-select: none;
-  pointer-events: none;   /* never intercepts clicks on header controls */
+  cursor: pointer;        /* clickable to name / rename the project */
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.project-name-pill:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #fff;
+}
+.project-name-pill:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 .project-name-pill.unnamed {
   color: rgba(255, 255, 255, 0.35);

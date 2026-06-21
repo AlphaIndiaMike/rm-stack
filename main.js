@@ -100,6 +100,27 @@ document.addEventListener('DOMContentLoaded', () => {
         Persistence.save(doc, () => { refreshProjectNamePill(); markClean(); });
     });
 
+    // Project pill — click (or Enter/Space) to name or rename the project
+    // via the shared name modal. Renaming changes persisted data, so it
+    // marks the document dirty; the pill updates immediately.
+    const projectPill = document.getElementById('projectNamePill');
+    const openRename = () => {
+        const hasName = !!(doc.projectName && doc.projectName.trim());
+        Persistence.promptName(doc.projectName,
+            hasName ? 'Rename project' : 'Name this project',
+            hasName ? 'Rename' : 'Save name').then(name => {
+            if (name == null) return;                                   // cancelled
+            if (name.trim() === (doc.projectName || '').trim()) return; // unchanged
+            doc.projectName = name.trim();
+            refreshProjectNamePill();
+            markDirty();
+        });
+    };
+    projectPill.addEventListener('click', openRename);
+    projectPill.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRename(); }
+    });
+
     const loadInput = document.getElementById('loadJsonInput');    document.getElementById('loadJsonButton').addEventListener('click', () => loadInput.click());
     loadInput.addEventListener('change', async e => {
         const file = e.target.files[0];
@@ -205,11 +226,11 @@ function refreshProjectNamePill() {
     if (name) {
         pill.textContent = name;
         pill.classList.remove('unnamed');
-        pill.title = 'Project name';
+        pill.title = 'Click to rename this project';
     } else {
         pill.textContent = 'untitled';
         pill.classList.add('unnamed');
-        pill.title = 'Project name — set when you save';
+        pill.title = 'Click to name this project';
     }
 }
 

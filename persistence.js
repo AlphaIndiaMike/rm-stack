@@ -1,26 +1,36 @@
 /**
  * persistence.js
  *
- * Load/save the document as JSON. Browser-side only (no server).
+ * Load/save the document. Browser-side only (no server).
+ *
+ * File format & extension
+ * -----------------------
+ * The on-disk format is JSON, but the tool's own extension is `.rms`
+ * (Requirement-Studio project). Files are saved as
+ * `snake_case(projectName)_YYYY-MM-DD.rms` and the Load dialog filters
+ * to `.rms`. The single source of truth is `Persistence.EXT` /
+ * `Persistence.MIME` — change them in one place to retune. Content is
+ * unchanged from the previous JSON files, so an old `.json` export can
+ * still be loaded if the user picks "all files"; only the default
+ * filter and the produced extension changed.
  *
  * Project name & filename
  * -----------------------
- * A project carries a top-level `projectName`. The save filename is
- * `snake_case(projectName)_YYYY-MM-DD.json`. If the project is unnamed
- * (empty `projectName`), `Persistence.save` opens a small modal asking
- * for the name first, stores it on the document, then downloads. Once a
- * name is set, subsequent saves download directly with no modal.
+ * A project carries a top-level `projectName`. If unnamed, `save` opens
+ * the name modal first. The same modal (`Persistence.promptName`) backs
+ * the project-pill rename, so naming and renaming share one dialog.
  *
  * No migration layer
  * ------------------
- * This is a development-stage project; saved files don't need to be
- * forward-compatible with prior schema versions. The SyrsDocument
- * constructor is defensive about missing/legacy fields anyway — a
- * missing `projectName` simply reads as unnamed. If a real schema break
- * ever lands, reintroduce a migration here.
+ * Development-stage project; the SyrsDocument constructor is defensive
+ * about missing/legacy fields. A missing `projectName` reads as unnamed.
  */
 
 class Persistence {
+
+    // Single source of truth for the project file format.
+    static get EXT()  { return 'rms'; }                         // Requirement-Studio project
+    static get MIME() { return 'application/json'; }            // contents are JSON
 
     /**
      * Save the document. If unnamed, prompt for a name first (modal),
@@ -30,7 +40,7 @@ class Persistence {
      */
     static save(doc, onNamed) {
         if (!doc.projectName || !doc.projectName.trim()) {
-            Persistence._promptName(doc.projectName).then(name => {
+            Persistence.promptName(doc.projectName, 'Name this project', 'Save Project').then(name => {
                 if (name == null) return;          // cancelled — abort save
                 doc.projectName = name.trim();
                 if (typeof onNamed === 'function') onNamed(doc.projectName);
@@ -41,16 +51,22 @@ class Persistence {
         Persistence._download(doc);
     }
 
+    /** Pure filename composition: snake_case(name)_YYYY-MM-DD.rms.
+     *  Separated from _download so it is testable without the DOM. */
+    static fileName(doc, date) {
+        const d = date || new Date().toISOString().substring(0, 10);
+        const base = Persistence.snakeCase(doc && doc.projectName) || 'untitled';
+        return `${base}_${d}.${Persistence.EXT}`;
+    }
+
     /** Build the file and trigger the browser download. */
     static _download(doc) {
         const json = JSON.stringify(doc.toJSON(), null, 2);
-        const blob = new Blob([json], { type: 'application/json' });
+        const blob = new Blob([json], { type: Persistence.MIME });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        const date = new Date().toISOString().substring(0, 10);   // YYYY-MM-DD
-        const base = Persistence.snakeCase(doc.projectName) || 'untitled';
         a.href = url;
-        a.download = `${base}_${date}.json`;
+        a.download = Persistence.fileName(doc);
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -72,10 +88,12 @@ class Persistence {
     }
 
     /**
-     * Modal asking for the project name. Resolves with the entered name,
-     * or null if cancelled. Styled with the shared modal classes.
+     * Modal asking for / editing the project name. Resolves with the
+     * entered name, or null if cancelled. Reused by both Save (unnamed
+     * project) and the project-pill rename, so the two share one dialog.
+     * `title` and `ctaLabel` let the caller word it for either flow.
      */
-    static _promptName(current) {
+    static promptName(current, title, ctaLabel) {
         return new Promise(resolve => {
             const existing = document.getElementById('nameModal');
             if (existing) existing.remove();
@@ -86,13 +104,13 @@ class Persistence {
             overlay.innerHTML = `
                 <div class="export-modal-box" role="dialog" aria-modal="true" aria-labelledby="nameModalTitle">
                     <div class="export-modal-header">
-                        <span id="nameModalTitle" class="export-modal-title">Name this project</span>
+                        <span id="nameModalTitle" class="export-modal-title">${title || 'Name this project'}</span>
                         <button class="export-modal-close" title="Cancel" aria-label="Close">✕</button>
                     </div>
                     <div class="export-modal-body">
                         <p class="export-modal-hint">
                             The name is stored in the project file and used for the
-                            download filename (<code>snake_case_date.json</code>).
+                            download filename (<code>snake_case_date.${Persistence.EXT}</code>).
                         </p>
                         <input type="text" id="projectNameInput" class="name-modal-input"
                                placeholder="e.g. Front Radar ECU" value="${(current || '').replace(/"/g, '&quot;')}"
@@ -100,7 +118,7 @@ class Persistence {
                         <div class="name-modal-preview" id="nameModalPreview"></div>
                         <div class="name-modal-actions">
                             <button class="btn-add" id="nameCancelBtn">Cancel</button>
-                            <button class="btn-add btn-generate" id="nameSaveBtn">Save Project</button>
+                            <button class="btn-add btn-generate" id="nameSaveBtn">${ctaLabel || 'Save Project'}</button>
                         </div>
                     </div>
                 </div>`;
@@ -112,7 +130,7 @@ class Persistence {
             const refreshPreview = () => {
                 const base = Persistence.snakeCase(input.value) || 'untitled';
                 const date = new Date().toISOString().substring(0, 10);
-                preview.textContent = `${base}_${date}.json`;
+                preview.textContent = `${base}_${date}.${Persistence.EXT}`;
                 saveBtn.disabled = !input.value.trim();
             };
 

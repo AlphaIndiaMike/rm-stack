@@ -42,7 +42,7 @@
 
         <!-- Project name pill (absolutely centred in the header). Text and
              named/unnamed state are set on boot, load and save by main.js. -->
-        <span id="projectNamePill" class="project-name-pill unnamed" title="Project name — set when you save">untitled</span>
+        <span id="projectNamePill" class="project-name-pill unnamed" title="Click to name / rename this project" role="button" tabindex="0">untitled</span>
 
         <!-- Right-side actions -->
         <div class="header-actions">
@@ -51,7 +51,7 @@
             <button id="toggleRightPane" class="btn-pane-toggle"
                 title="Show/hide the model summary pane">Summary ☰</button>
 
-            <input type="file" id="loadJsonInput" accept=".json" style="display:none;">
+            <input type="file" id="loadJsonInput" accept=".rms" style="display:none;">
             <div id="topBarActions" class="header-actions hidden">
                 <button id="exportTxtButton" class="btn-hd btn-hd-outline">Export TXT</button>
                 <button id="exportPdfButton" class="btn-hd btn-hd-outline">Export PDF</button>
@@ -59,7 +59,7 @@
                 <button id="saveJsonButton"  class="btn-hd btn-hd-primary">Save Project</button>
             </div>
 
-            <span class="app-version" title="Application version">v1.6.6</span>
+            <span class="app-version" title="Application version">v1.6.7</span>
         </div>
     </header>
 

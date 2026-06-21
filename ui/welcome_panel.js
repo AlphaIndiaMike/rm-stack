@@ -30,7 +30,7 @@ const WelcomePanel = {
             <p class="welcome-lead">
                 Author safety-aware system requirements with grammar validation,
                 completeness tracking, and integrity checks. Everything stays
-                local — your project is a single <code>.json</code> file.
+                local — your project is a single <code>.rms</code> file.
             </p>
 
             <div class="welcome-steps">
