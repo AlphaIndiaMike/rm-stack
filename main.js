@@ -352,7 +352,7 @@ function renderAll() {
     const actions = document.getElementById('topBarActions');
     const header  = document.getElementById('chapterPaneHeader');
     if (actions) actions.classList.toggle('hidden', !inEditor);
-    if (header)  header.classList.toggle('d-none', !inEditor); // Bootstrap d-none still loaded via CDN — OK
+    if (header)  header.classList.toggle('d-none', !inEditor); // Bootstrap d-none — now loaded locally from lib/bootstrap/
 
     // Update the outline-pane completeness badge: how many of the selected
     // discipline's outline chapters are GREEN (checklists fully done — the
